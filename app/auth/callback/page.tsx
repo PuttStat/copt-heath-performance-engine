@@ -1,0 +1,4 @@
+"use client";
+import { useEffect, useState } from "react";
+import { getSupabaseBrowserClient, hasSupabaseConfig } from "../../../lib/supabase/client";
+export default function AuthCallback() { const [status, setStatus] = useState(hasSupabaseConfig() ? "Completing secure sign-in…" : "Supabase is not configured."); useEffect(() => { const supabase = getSupabaseBrowserClient(); if (!supabase) return; const code = new URLSearchParams(window.location.search).get("code"); const finish = code ? supabase.auth.exchangeCodeForSession(code) : supabase.auth.getSession(); finish.then(({ error }) => { if (error) setStatus(error.message); else window.location.replace("/"); }); }, []); return <main className="auth-page"><section className="auth-card"><span className="brand-mark">V</span><h1>{status}</h1></section></main>; }
