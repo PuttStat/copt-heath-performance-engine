@@ -1,6 +1,6 @@
-# Vector Golf Performance — Package 7C
+# Vector Golf Performance — Package 7D
 
-The secure Supabase-connected foundation for a selected-player beta of the 12-week Vector Golf Performance programme.
+The live, data-driven player performance engine for the selected-player beta of the 12-week Vector Golf Performance programme.
 
 ## Included
 
@@ -15,8 +15,12 @@ The secure Supabase-connected foundation for a selected-player beta of the 12-we
 - Invitation-only passwordless sign-in
 - Supabase schema, migrations and player-level Row Level Security
 - Player/coach relationship model and offline-to-cloud round synchronisation
+- Authenticated profile and real round totals on the dashboard
+- Frequency × failure × evidence practice-priority calculation
+- Full 18-hole shot capture with golfer-defined success/failure
+- Short/long and left/right miss-pattern capture for failures
 
-Follow `PACKAGE_7C_SETUP.md` to run the migration, add Vercel environment variables and invite the first beta players.
+Follow `PACKAGE_7D_SETUP.md` to install the incremental detailed-shot migration and complete the acceptance check.
 
 ## Run locally
 
@@ -39,8 +43,8 @@ Copy `.env.example` to `.env.local` only when Package 7C begins. Never commit `.
 ## Suggested delivery order
 
 1. **7B — complete:** PWA shell and offline capture
-2. **7C — current:** Supabase schema, invite-only auth and RLS
-3. **7D:** detailed round capture and calibrated priority engine
+2. **7C — complete:** Supabase schema, invite-only auth and RLS
+3. **7D — current:** detailed round capture and weighted priority engine
 4. **7E:** diagnostic rules and drill recommendations
 5. **7F:** 12-week prescription and adherence
 6. **7G:** TrackMan import and coach tools
