@@ -1,4 +1,4 @@
-# Vector Golf Performance — Package 7D
+# Vector Golf Performance — Package 7E.1
 
 The live, data-driven player performance engine for the selected-player beta of the 12-week Vector Golf Performance programme.
 
@@ -19,8 +19,12 @@ The live, data-driven player performance engine for the selected-player beta of 
 - Frequency × failure × evidence practice-priority calculation
 - Full 18-hole shot capture with golfer-defined success/failure
 - Short/long and left/right miss-pattern capture for failures
+- 224 coded golf-drill routes from the Performance Engine
+- 31 initial VECTOR exercises from the completed 2E programming manuals
+- Coach-only Library Manager with draft, approval, retirement and version history
+- Diagnostic-rule and drill/exercise linking foundation
 
-Follow `PACKAGE_7D_SETUP.md` to install the incremental detailed-shot migration and complete the acceptance check.
+Follow `PACKAGE_7E1_SETUP.md` to create and seed the library before deploying the updated application.
 
 ## Run locally
 
@@ -44,8 +48,9 @@ Copy `.env.example` to `.env.local` only when Package 7C begins. Never commit `.
 
 1. **7B — complete:** PWA shell and offline capture
 2. **7C — complete:** Supabase schema, invite-only auth and RLS
-3. **7D — current:** detailed round capture and weighted priority engine
-4. **7E:** diagnostic rules and drill recommendations
-5. **7F:** 12-week prescription and adherence
-6. **7G:** TrackMan import and coach tools
-7. **7H:** beta QA, analytics and production release
+3. **7D — complete:** detailed round capture and weighted priority engine
+4. **7E.1 — current:** structured drill, exercise and diagnostic-rule libraries
+5. **7E.2:** evidence evaluation and recommendation engine
+6. **7F:** 12-week prescription and adherence
+7. **7G:** TrackMan import and coach tools
+8. **7H:** beta QA, analytics and production release

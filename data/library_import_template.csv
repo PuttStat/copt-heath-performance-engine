@@ -1,0 +1,3 @@
+code,item_type,title,category,stage,purpose,instructions,dosage,pass_criterion,equipment,guardrails,media_url,source_reference,status
+DR-CUSTOM-001,golf_drill,Example coach drill,Putting,Awareness,Describe the intended change,Step-by-step instructions,2 x 5 balls,Define the measurable pass criterion,Alignment stick,State when not to use it,,Coach library,draft
+VEC-CUSTOM-001,vector_exercise,Example Vector exercise,Strength,Build,Describe the physical adaptation,Step-by-step instructions,3 x 6,Define the quality or output standard,Dumbbell,Screening and pain guardrails,,Vector coach library,draft
