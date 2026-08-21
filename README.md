@@ -1,28 +1,79 @@
-# Vector Golf Performance · Package 7F.3.1
+# Vector Golf Performance — Package 7F.4
 
-This corrective package makes published coach session feedback reliably visible to the player.
+Package 7F.4 adds the weekly progression and retesting layer. It aggregates the player's completed work and response data, manages structured retests, and gives the coach an auditable Keep, Progress, Modify or Stop workflow for the next week.
 
-## What changed
+## Install order
 
-- Coach reviews are fetched directly from `session_reviews` by session-log ID instead of through a deeply nested relationship.
-- The review is merged into its matching session before rendering.
-- The first released session opens automatically after sign-in, so any published feedback is visible without an extra selection step.
-- When a coach reopens a reviewed session, the existing decision, feedback and evidence are loaded back into the form.
-- Supabase query errors are shown instead of silently hiding feedback.
+1. Run `supabase/migrations/202608220001_package_7f4_progression_retests.sql` in the Supabase SQL Editor.
+2. Upload the remaining files to their matching GitHub folders.
+3. Wait for Vercel to deploy.
+4. Sign in as the coach and open **Progress**.
 
-## Install
+Only the migration file is run in Supabase.
 
-Upload the included `app/practice/page.tsx` to the same path in GitHub and commit it to `main`. Vercel should redeploy automatically.
+## What the weekly evidence includes
 
-There is no SQL file in this corrective package. Do not run the earlier 7F.3 migration again.
+- planned and completed minutes;
+- adherence percentage;
+- completed sessions;
+- average readiness;
+- accumulated session load;
+- repeated performing, fatigued or declining responses;
+- safety/monitor flags;
+- coach Stop decisions; and
+- reviewed retests.
 
-## Test
+The engine suggestion is deliberately conservative:
 
-1. Wait for the Vercel deployment to report **Ready**.
-2. Sign in as the coach, open **Practice**, select the player and a completed session.
-3. Confirm the previously published decision and feedback are still populated.
-4. Sign out, then sign in as that player.
-5. Open **Practice**. The first session opens automatically.
-6. Select the reviewed session if it is in another week or session. Confirm the **Coach decision** panel displays the published feedback and supporting evidence.
+- **Stop** when a safety flag or coach Stop decision exists;
+- **Modify** when adherence is below 60% or repeated fatigued/declining responses exist;
+- **Progress** when adherence is at least 80%, at least two sessions are complete and at least two responses are performing, with no safety trigger;
+- **Keep** otherwise.
 
-If the app displays a feedback-loading error, copy the exact message; it will identify a remaining Supabase policy issue directly.
+This is a suggestion only. The coach must choose and explain the published decision.
+
+## Retest types
+
+- **Baseline:** establishes the starting measure.
+- **No-aid:** checks whether the change remains without a constraint or training aid.
+- **Transfer:** tests the skill under representative variability or pressure.
+- **Outcome:** checks whether the performance outcome has improved.
+
+## Validation sequence
+
+1. As the coach, open **Progress** and select the linked player.
+2. Select a week containing completed practice sessions.
+3. Confirm adherence, session completion, readiness, load and flags agree with the Practice page.
+4. Schedule a no-aid or transfer retest with a clear protocol and success criterion.
+5. Sign in as the player, open **Progress**, select the week and record the retest result.
+6. Sign back in as the coach and review the submitted result.
+7. Confirm the evidence-led suggestion is visible but remains editable.
+8. Enter a rationale, next-week focus and recommended golf/Vector minutes.
+9. Save a draft and confirm it is not visible to the player.
+10. Publish a decision and confirm the player can see the decision, rationale, focus and minute recommendation.
+11. Change and republish a decision, then confirm the earlier decision remains in the coach's decision history.
+
+## Database checks
+
+```sql
+select to_regclass('public.programme_retests') as programme_retests,
+       to_regclass('public.week_adjustments') as week_adjustments,
+       to_regclass('public.week_adjustment_versions') as week_adjustment_versions;
+
+select retest_type, title, status, result_value, unit, transfer_passed
+from public.programme_retests
+order by created_at desc;
+
+select decision, status, rationale, evidence_snapshot, published_at
+from public.week_adjustments
+order by created_at desc;
+```
+
+## Governing rules
+
+- Round data identifies where gains matter; it does not select a swing drill automatically.
+- A programme change must not be based on one unusual session.
+- A physical intervention is included only when a movement requirement supports the golf intervention.
+- Safety flags stop progression; they are coaching safeguards, not medical diagnoses.
+- Published decisions retain their evidence snapshot and all later edits create an audit version.
+- Package 7F.4 recommends the next-week change but does not silently rewrite a released week.
