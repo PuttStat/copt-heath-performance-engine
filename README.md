@@ -1,56 +1,28 @@
-# Vector Golf Performance — Package 7E.1
+# Vector Golf Performance · Package 7F.3.1
 
-The live, data-driven player performance engine for the selected-player beta of the 12-week Vector Golf Performance programme.
+This corrective package makes published coach session feedback reliably visible to the player.
 
-## Included
+## What changed
 
-- Responsive Today dashboard and mobile navigation
-- Offline-first Quick Round entry across the ten agreed shot bands
-- Explicit distinction between an empty value and a recorded zero
-- Local draft persistence and idempotent UUID queue records
-- Weighted performance-priority calculation boundary
-- Practice prescription and coach-insight views
-- Install manifest, icons and offline application shell
-- Placeholder routes for detailed hole-by-hole entry and later engine integration
-- Invitation-only passwordless sign-in
-- Supabase schema, migrations and player-level Row Level Security
-- Player/coach relationship model and offline-to-cloud round synchronisation
-- Authenticated profile and real round totals on the dashboard
-- Frequency × failure × evidence practice-priority calculation
-- Full 18-hole shot capture with golfer-defined success/failure
-- Short/long and left/right miss-pattern capture for failures
-- 224 coded golf-drill routes from the Performance Engine
-- 31 initial VECTOR exercises from the completed 2E programming manuals
-- Coach-only Library Manager with draft, approval, retirement and version history
-- Diagnostic-rule and drill/exercise linking foundation
+- Coach reviews are fetched directly from `session_reviews` by session-log ID instead of through a deeply nested relationship.
+- The review is merged into its matching session before rendering.
+- The first released session opens automatically after sign-in, so any published feedback is visible without an extra selection step.
+- When a coach reopens a reviewed session, the existing decision, feedback and evidence are loaded back into the form.
+- Supabase query errors are shown instead of silently hiding feedback.
 
-Follow `PACKAGE_7E1_SETUP.md` to create and seed the library before deploying the updated application.
+## Install
 
-## Run locally
+Upload the included `app/practice/page.tsx` to the same path in GitHub and commit it to `main`. Vercel should redeploy automatically.
 
-```bash
-npm ci
-npm run dev
-```
+There is no SQL file in this corrective package. Do not run the earlier 7F.3 migration again.
 
-Open the local URL shown in the terminal. For a production check:
+## Test
 
-```bash
-npm run lint
-npm test
-```
+1. Wait for the Vercel deployment to report **Ready**.
+2. Sign in as the coach, open **Practice**, select the player and a completed session.
+3. Confirm the previously published decision and feedback are still populated.
+4. Sign out, then sign in as that player.
+5. Open **Practice**. The first session opens automatically.
+6. Select the reviewed session if it is in another week or session. Confirm the **Coach decision** panel displays the published feedback and supporting evidence.
 
-## Supabase environment
-
-Copy `.env.example` to `.env.local` only when Package 7C begins. Never commit `.env.local` or the Supabase service-role key. Client code will use only the project URL and anon/publishable key; row-level security remains the security boundary.
-
-## Suggested delivery order
-
-1. **7B — complete:** PWA shell and offline capture
-2. **7C — complete:** Supabase schema, invite-only auth and RLS
-3. **7D — complete:** detailed round capture and weighted priority engine
-4. **7E.1 — current:** structured drill, exercise and diagnostic-rule libraries
-5. **7E.2:** evidence evaluation and recommendation engine
-6. **7F:** 12-week prescription and adherence
-7. **7G:** TrackMan import and coach tools
-8. **7H:** beta QA, analytics and production release
+If the app displays a feedback-loading error, copy the exact message; it will identify a remaining Supabase policy issue directly.
