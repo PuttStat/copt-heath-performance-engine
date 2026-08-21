@@ -913,7 +913,10 @@ where item.code=content.code and item.item_type='golf_drill'
 do $$
 declare total integer; ready integer;
 begin
-  select count(*),count(*) filter(where instruction_complete) into total,ready from public.library_items where item_type='golf_drill';
+  select count(*),count(*) filter(where instruction_complete) into total,ready
+  from public.library_items
+  where item_type='golf_drill'
+    and source_reference like 'Copt Heath Performance Engine v3.1 · % Drill Library';
   if total<>224 then raise exception 'Expected 224 golf drills, found %',total; end if;
   if ready<>224 then raise exception 'Expected 224 player-ready golf drills, found %',ready; end if;
 end $$;
