@@ -13,26 +13,99 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.library-code b.complete { background: var(--sage); color: var(--green); }
-.library-code b.incomplete { background: var(--amber); color: #79520b; }
-.library-card.editing { grid-template-columns: 110px 1fr; }
-.library-instructions { margin: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 10px 0; }
-.library-instructions summary { cursor: pointer; font-size: 10px; font-weight: 800; color: var(--green); }
-.library-instructions dl { display: grid; gap: 10px; }
-.library-instructions dl div { display: grid; grid-template-columns: 105px 1fr; gap: 12px; }
-.library-instructions dd { line-height: 1.55; }
-.preserve-lines { white-space: pre-line; }
-.edit-item { border: 1px solid var(--ink); background: transparent; padding: 9px 10px; font-size: 9px; font-weight: 800; cursor: pointer; }
-.instruction-fields { display: grid; gap: 10px; }
-.inline-editor { margin: 16px 0; padding: 16px; background: #f4f1e8; border: 1px solid var(--line); }
-.inline-editor label { display: grid; gap: 5px; font-size: 9px; font-weight: 800; }
-.inline-editor input, .inline-editor textarea { width: 100%; border: 1px solid var(--line); background: white; padding: 9px; }
-.inline-editor textarea { min-height: 74px; resize: vertical; }
-.editor-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-.editor-actions > button:not(.primary-action) { border: 1px solid var(--ink); background: transparent; padding: 9px 11px; cursor: pointer; }
+.library-code b.complete {
+  background: var(--sage);
+  color: var(--green);
+}
+.library-code b.incomplete {
+  background: var(--amber);
+  color: #79520b;
+}
+.library-card.editing {
+  grid-template-columns: 110px 1fr;
+}
+.library-instructions {
+  margin: 14px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+.library-instructions summary {
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--green);
+}
+.library-instructions dl {
+  display: grid;
+  gap: 10px;
+}
+.library-instructions dl div {
+  display: grid;
+  grid-template-columns: 105px 1fr;
+  gap: 12px;
+}
+.library-instructions dd {
+  line-height: 1.55;
+}
+.preserve-lines {
+  white-space: pre-line;
+}
+.edit-item {
+  border: 1px solid var(--ink);
+  background: transparent;
+  padding: 9px 10px;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.instruction-fields {
+  display: grid;
+  gap: 10px;
+}
+.inline-editor {
+  margin: 16px 0;
+  padding: 16px;
+  background: #f4f1e8;
+  border: 1px solid var(--line);
+}
+.inline-editor label {
+  display: grid;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 800;
+}
+.inline-editor input,
+.inline-editor textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: white;
+  padding: 9px;
+}
+.inline-editor textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+.editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.editor-actions > button:not(.primary-action) {
+  border: 1px solid var(--ink);
+  background: transparent;
+  padding: 9px 11px;
+  cursor: pointer;
+}
 @media (max-width: 780px) {
-  .library-card.editing { grid-template-columns: 1fr; }
-  .library-instructions dl div { grid-template-columns: 1fr; gap: 3px; }
+  .library-card.editing {
+    grid-template-columns: 1fr;
+  }
+  .library-instructions dl div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
 }
 .library-summary div {
   padding: 24px;
@@ -138,6 +211,34 @@
   font-size: 11px;
   margin: 0;
 }
+.library-card > div:nth-child(2) {
+  min-width: 0;
+}
+.library-card .library-instructions dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin: 12px 0 0;
+}
+.library-card .library-instructions dl > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 140px) minmax(0, 1fr);
+  gap: 18px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.library-card .library-instructions dl > div:last-child {
+  border-bottom: 0;
+}
+.library-card .library-instructions dt {
+  line-height: 1.45;
+}
+.library-card .library-instructions dd {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
 .library-editor {
   position: sticky;
   top: 96px;
@@ -193,6 +294,10 @@
   .library-card dl {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+  .library-card .library-instructions dl > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
   .mobile-nav a {
     font-size: 8px;
