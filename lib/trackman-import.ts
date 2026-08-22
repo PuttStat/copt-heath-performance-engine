@@ -17,10 +17,10 @@ export type TrackmanParseResult = {
 const aliases: Record<string, string> = {
   club: "club", clubtype: "club", date: "shot_date", time: "shot_time", datetime: "shot_time",
   ballspeed: "ball_speed", clubspeed: "club_speed", clubheadspeed: "club_speed", smashfactor: "smash_factor",
-  carry: "carry", carrydistance: "carry", total: "total", totaldistance: "total", rolldistance: "roll",
+  carry: "carry", carrydistance: "carry", carryflatlength: "carry", total: "total", totaldistance: "total", esttotalflatlength: "total", rolldistance: "roll",
   launchangle: "launch_angle", launchdirection: "launch_direction", spinrate: "spin_rate", spinaxis: "spin_axis",
-  height: "height", maxheight: "height", apex: "height", landingangle: "landing_angle", descentangle: "landing_angle",
-  hangtime: "hang_time", flighttime: "hang_time", curve: "curve", sidedistance: "side_distance", offline: "side_distance",
+  height: "height", maxheight: "height", apex: "height", heightflat: "height", maxheightflat: "height", landingangle: "landing_angle", descentangle: "landing_angle", carryflatlandangle: "landing_angle",
+  hangtime: "hang_time", flighttime: "hang_time", curve: "curve", sidedistance: "side_distance", offline: "side_distance", carryflatside: "side_distance",
   faceangle: "face_angle", clubpath: "club_path", facetopath: "face_to_path", attackangle: "attack_angle",
   angleofattack: "attack_angle", dynamicloft: "dynamic_loft", spinloft: "spin_loft", lowpoint: "low_point",
   swingplane: "swing_plane", swingdirection: "swing_direction", swingradius: "swing_radius",
@@ -62,7 +62,7 @@ export async function parseTrackmanCsv(text: string): Promise<TrackmanParseResul
   const shots: TrackmanShot[] = []; const rejected: { row: number; reason: string }[] = [];
   for (let index = headerIndex + 1; index < rows.length; index++) {
     const cells = rows[index]; const raw: Record<string, string> = {}; const values: Record<string, TrackmanValue> = {};
-    headers.forEach((header, column) => { const rawValue = (cells[column] || "").trim(); raw[header] = rawValue; const field = aliases[normalise(header)]; if (!field || values[field] !== undefined) return; if (!rawValue) values[field] = null; else if (numericFields.has(field)) { const parsed = Number(rawValue.replace(/,/g, "")); values[field] = Number.isFinite(parsed) ? parsed : null; } else values[field] = rawValue; });
+    headers.forEach((header, column) => { const rawValue = (cells[column] || "").trim(); raw[header] = rawValue; const field = aliases[normalise(header)]; if (!field || (values[field] !== undefined && values[field] !== null)) return; if (!rawValue) { if (values[field] === undefined) values[field] = null; } else if (numericFields.has(field)) { const parsed = Number(rawValue.replace(/,/g, "")); values[field] = Number.isFinite(parsed) ? parsed : null; } else values[field] = rawValue; });
     const populated = Object.values(raw).filter(Boolean).length;
     const measurable = ["ball_speed", "club_speed", "carry", "spin_rate", "launch_angle", "club_path"].some(field => typeof values[field] === "number");
     if (!populated) continue;
