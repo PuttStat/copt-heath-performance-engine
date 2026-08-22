@@ -1,0 +1,1 @@
+import Link from"next/link";export default function NotFound(){return <main className="error-recovery"><span>V</span><p>Vector Golf Performance</p><h1>This page does not exist.</h1><p>The address may be outdated or incomplete. Return to the dashboard without changing any saved information.</p><div><Link href="/">Return home</Link></div></main>}
