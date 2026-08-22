@@ -19,7 +19,7 @@ const aliases: Record<string, string> = {
   ballspeed: "ball_speed", clubspeed: "club_speed", clubheadspeed: "club_speed", smashfactor: "smash_factor",
   carry: "carry", carrydistance: "carry", carryflatlength: "carry", total: "total", totaldistance: "total", esttotalflatlength: "total", rolldistance: "roll",
   launchangle: "launch_angle", launchdirection: "launch_direction", spinrate: "spin_rate", spinaxis: "spin_axis",
-  height: "height", maxheight: "height", apex: "height", heightflat: "height", maxheightflat: "height", landingangle: "landing_angle", descentangle: "landing_angle", carryflatlandangle: "landing_angle",
+  height: "height", maxheight: "height", maxheightheight: "height", apex: "height", heightflat: "height", maxheightflat: "height", landingangle: "landing_angle", descentangle: "landing_angle", carryflatlandangle: "landing_angle",
   hangtime: "hang_time", flighttime: "hang_time", curve: "curve", sidedistance: "side_distance", offline: "side_distance", carryflatside: "side_distance",
   faceangle: "face_angle", clubpath: "club_path", facetopath: "face_to_path", attackangle: "attack_angle",
   angleofattack: "attack_angle", dynamicloft: "dynamic_loft", spinloft: "spin_loft", lowpoint: "low_point",
