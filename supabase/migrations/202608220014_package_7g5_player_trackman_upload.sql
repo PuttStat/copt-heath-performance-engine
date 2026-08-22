@@ -1,0 +1,32 @@
+-- Vector Golf Performance · Package 7G.5 player TrackMan practice upload
+alter table public.trackman_imports add column if not exists uploaded_by uuid references public.profiles(id) on delete set null;
+alter table public.trackman_imports add column if not exists upload_source text not null default 'coach' check(upload_source in('coach','player'));
+alter table public.trackman_sessions add column if not exists practice_note text;
+alter table public.trackman_sessions add column if not exists review_status text not null default 'not_requested' check(review_status in('not_requested','submitted','reviewed'));
+alter table public.trackman_sessions add column if not exists submitted_at timestamptz;
+create index if not exists trackman_sessions_review_idx on public.trackman_sessions(review_status,created_at desc);
+
+create or replace function public.import_trackman_csv(payload jsonb) returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_import uuid;v_session uuid;v_shot jsonb;v_values jsonb;v_inserted integer:=0;v_duplicates integer:=0;v_player uuid:=(payload->>'player_id')::uuid;v_hash text:=payload->>'file_sha256';v_self boolean:=v_player=auth.uid();v_test text:=coalesce(nullif(payload->>'test_type',''),'standard');
+begin
+ if not(v_self or public.is_coach_of(v_player)) then raise exception 'You may only upload for yourself or a linked player';end if;
+ if v_test not in('standard','baseline','no_aid','transfer','retest') then raise exception 'Unsupported practice type';end if;
+ if coalesce(jsonb_array_length(payload->'shots'),0)=0 then raise exception 'No valid TrackMan shots were supplied';end if;
+ select id into v_import from public.trackman_imports where coalesce(uploaded_by,coach_id)=auth.uid() and file_sha256=v_hash;
+ if v_import is not null then return jsonb_build_object('status','duplicate','import_id',v_import,'inserted',0,'duplicates',jsonb_array_length(payload->'shots'));end if;
+ insert into public.trackman_imports(coach_id,player_id,uploaded_by,upload_source,file_name,file_sha256,header_row,original_headers,import_metadata,rejected_rows)
+ values(auth.uid(),v_player,auth.uid(),case when v_self then 'player' else 'coach' end,payload->>'file_name',v_hash,(payload->>'header_row')::integer,payload->'headers',coalesce(payload->'metadata','{}'::jsonb),coalesce((payload->>'rejected_rows')::integer,0)) returning id into v_import;
+ insert into public.trackman_sessions(import_id,player_id,coach_id,title,session_date,location,notes,test_type,practice_note,review_status,submitted_at)
+ values(v_import,v_player,auth.uid(),coalesce(nullif(payload->>'title',''),payload->>'file_name'),nullif(payload->>'session_date','')::date,nullif(payload->>'location',''),nullif(payload->>'notes',''),v_test,nullif(payload->>'practice_note',''),case when coalesce((payload->>'submit_for_review')::boolean,false) then 'submitted' else 'not_requested' end,case when coalesce((payload->>'submit_for_review')::boolean,false) then now() else null end) returning id into v_session;
+ for v_shot in select value from jsonb_array_elements(payload->'shots') loop v_values:=v_shot->'values';
+  insert into public.trackman_shots(session_id,player_id,source_row,fingerprint,club,shot_date,shot_time,ball_speed,club_speed,smash_factor,carry,total,roll,launch_angle,launch_direction,spin_rate,spin_axis,height,landing_angle,hang_time,curve,side_distance,face_angle,club_path,face_to_path,attack_angle,dynamic_loft,spin_loft,low_point,swing_plane,swing_direction,swing_radius,impact_height,impact_offset,d_plane,trajectory,target_distance,temperature,humidity,air_pressure,wind_speed,wind_direction,raw_values)
+  values(v_session,v_player,(v_shot->>'row_number')::integer,v_shot->>'fingerprint',v_values->>'club',v_values->>'shot_date',v_values->>'shot_time',nullif(v_values->>'ball_speed','')::numeric,nullif(v_values->>'club_speed','')::numeric,nullif(v_values->>'smash_factor','')::numeric,nullif(v_values->>'carry','')::numeric,nullif(v_values->>'total','')::numeric,nullif(v_values->>'roll','')::numeric,nullif(v_values->>'launch_angle','')::numeric,nullif(v_values->>'launch_direction','')::numeric,nullif(v_values->>'spin_rate','')::numeric,nullif(v_values->>'spin_axis','')::numeric,nullif(v_values->>'height','')::numeric,nullif(v_values->>'landing_angle','')::numeric,nullif(v_values->>'hang_time','')::numeric,nullif(v_values->>'curve','')::numeric,nullif(v_values->>'side_distance','')::numeric,nullif(v_values->>'face_angle','')::numeric,nullif(v_values->>'club_path','')::numeric,nullif(v_values->>'face_to_path','')::numeric,nullif(v_values->>'attack_angle','')::numeric,nullif(v_values->>'dynamic_loft','')::numeric,nullif(v_values->>'spin_loft','')::numeric,nullif(v_values->>'low_point','')::numeric,nullif(v_values->>'swing_plane','')::numeric,nullif(v_values->>'swing_direction','')::numeric,nullif(v_values->>'swing_radius','')::numeric,nullif(v_values->>'impact_height','')::numeric,nullif(v_values->>'impact_offset','')::numeric,nullif(v_values->>'d_plane','')::numeric,v_values->>'trajectory',nullif(v_values->>'target_distance','')::numeric,nullif(v_values->>'temperature','')::numeric,nullif(v_values->>'humidity','')::numeric,nullif(v_values->>'air_pressure','')::numeric,nullif(v_values->>'wind_speed','')::numeric,nullif(v_values->>'wind_direction','')::numeric,v_shot->'raw_values') on conflict(player_id,fingerprint) do nothing;
+  if found then v_inserted:=v_inserted+1;else v_duplicates:=v_duplicates+1;end if;
+ end loop;
+ update public.trackman_imports set accepted_rows=v_inserted,status='completed',import_metadata=import_metadata||jsonb_build_object('duplicate_shots',v_duplicates) where id=v_import;
+ return jsonb_build_object('status','completed','import_id',v_import,'session_id',v_session,'inserted',v_inserted,'duplicates',v_duplicates);
+end;$$;
+drop policy if exists "coaches read linked TrackMan imports" on public.trackman_imports;drop policy if exists "players read own TrackMan imports" on public.trackman_imports;
+create policy "coaches read linked TrackMan imports" on public.trackman_imports for select using(public.is_coach_of(player_id));create policy "players read own TrackMan imports" on public.trackman_imports for select using(player_id=auth.uid());
+drop policy if exists "coaches read linked TrackMan sessions" on public.trackman_sessions;create policy "coaches read linked TrackMan sessions" on public.trackman_sessions for select using(public.is_coach_of(player_id));
+grant execute on function public.import_trackman_csv(jsonb) to authenticated;
