@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { mux } from '@/lib/mux';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { mux } from '@/src/lib/mux';
+import { createAdminClient } from '@/src/lib/supabase/admin';
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
