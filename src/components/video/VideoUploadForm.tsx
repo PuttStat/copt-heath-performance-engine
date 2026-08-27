@@ -13,38 +13,50 @@ export function VideoUploadForm() {
   async function begin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!file) return setMessage('Choose a swing video first.');
+    const form = new FormData(event.currentTarget);
     setBusy(true);
     setMessage('');
-    const supabase = getSupabaseBrowserClient();
-    const { data: { session } } = supabase
-      ? await supabase.auth.getSession()
-      : { data: { session: null } };
-    if (!session) {
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data: { session } } = supabase
+        ? await supabase.auth.getSession()
+        : { data: { session: null } };
+      if (!session) {
+        setBusy(false);
+        setMessage('Your session has expired. Please sign in again.');
+        return;
+      }
+
+      const response = await fetch('/api/videos/uploads', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          swingType: form.get('swingType'), cameraView: form.get('cameraView'), club: form.get('club'),
+          handedness: form.get('handedness'), ballFlight: form.get('ballFlight'), playerQuestion: form.get('playerQuestion'),
+          fileName: file.name, fileSize: file.size, mimeType: file.type,
+        }),
+      });
+      const result = await response.json().catch(() => ({ error: 'The upload service returned an invalid response.' }));
+      if (!response.ok) {
+        setBusy(false);
+        setMessage(result.error || 'Upload could not be started.');
+        return;
+      }
+
+      setMessage('Uploading. Keep this page open until it completes.');
+      const upload = UpChunk.createUpload({ endpoint: result.uploadUrl, file, chunkSize: 5120 });
       setBusy(false);
-      setMessage('Your session has expired. Please sign in again.');
-      return;
+      upload.on('progress', (event: any) => setProgress(Math.round(event.detail)));
+      upload.on('success', () => { setProgress(100); setMessage('Upload complete. Vector is preparing the video for review.'); });
+      upload.on('error', () => { setMessage('The connection was interrupted. Please try the upload again.'); setBusy(false); });
+    } catch {
+      setBusy(false);
+      setMessage('Upload could not be started. Please refresh the page and try again.');
     }
-    const form = new FormData(event.currentTarget);
-    const response = await fetch('/api/videos/uploads', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        swingType: form.get('swingType'), cameraView: form.get('cameraView'), club: form.get('club'),
-        handedness: form.get('handedness'), ballFlight: form.get('ballFlight'), playerQuestion: form.get('playerQuestion'),
-        fileName: file.name, fileSize: file.size, mimeType: file.type,
-      }),
-    });
-    const result = await response.json();
-    setBusy(false);
-    if (!response.ok) return setMessage(result.error || 'Upload could not be started.');
-    setMessage('Uploading. Keep this page open until it completes.');
-    const upload = UpChunk.createUpload({ endpoint: result.uploadUrl, file, chunkSize: 5120 });
-    upload.on('progress', (event: any) => setProgress(Math.round(event.detail)));
-    upload.on('success', () => { setProgress(100); setMessage('Upload complete. Vector is preparing the video for review.'); });
-    upload.on('error', () => { setMessage('The connection was interrupted. Please try the upload again.'); setBusy(false); });
   }
 
   if (progress !== undefined && file) return <section className="video-card"><h2>Uploading {file.name}</h2><progress max="100" value={progress}>{progress}%</progress><p>{progress}%</p><p aria-live="polite">{message}</p></section>;
