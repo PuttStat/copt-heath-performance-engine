@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import * as UpChunk from '@mux/upchunk';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export function VideoUploadForm() {
   const [file, setFile] = useState<File | null>(null);
@@ -13,10 +14,23 @@ export function VideoUploadForm() {
     event.preventDefault();
     if (!file) return setMessage('Choose a swing video first.');
     setBusy(true);
+    setMessage('');
+    const supabase = getSupabaseBrowserClient();
+    const { data: { session } } = supabase
+      ? await supabase.auth.getSession()
+      : { data: { session: null } };
+    if (!session) {
+      setBusy(false);
+      setMessage('Your session has expired. Please sign in again.');
+      return;
+    }
     const form = new FormData(event.currentTarget);
     const response = await fetch('/api/videos/uploads', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${session.access_token}`,
+      },
       body: JSON.stringify({
         swingType: form.get('swingType'), cameraView: form.get('cameraView'), club: form.get('club'),
         handedness: form.get('handedness'), ballFlight: form.get('ballFlight'), playerQuestion: form.get('playerQuestion'),

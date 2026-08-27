@@ -1,14 +1,28 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/src/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { getMux } from '@/src/lib/mux';
 
-const allowedTypes = new Set(['full_swing','pitching','chipping','bunker','putting']);
-const allowedViews = new Set(['down_the_line','face_on','rear','other']);
+const allowedTypes = new Set(['full_swing', 'pitching', 'chipping', 'bunker', 'putting']);
+const allowedViews = new Set(['down_the_line', 'face_on', 'rear', 'other']);
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  const authHeader = request.headers.get('authorization');
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+  if (!authHeader?.startsWith('Bearer ') || !url || !key) {
+    return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  }
+
+  const accessToken = authHeader.slice('Bearer '.length);
+  const supabase = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Your session has expired. Please sign in again.' }, { status: 401 });
+  }
 
   const body = await request.json();
   if (!allowedTypes.has(body.swingType) || !allowedViews.has(body.cameraView)) {
@@ -45,7 +59,9 @@ export async function POST(request: Request) {
     .select('id')
     .single();
 
-  if (insertError || !video) return NextResponse.json({ error: 'Could not create video record' }, { status: 500 });
+  if (insertError || !video) {
+    return NextResponse.json({ error: 'Could not create video record' }, { status: 500 });
+  }
 
   try {
     const mux = getMux();
@@ -61,7 +77,10 @@ export async function POST(request: Request) {
     await supabase.from('swing_videos').update({ mux_upload_id: upload.id }).eq('id', video.id);
     return NextResponse.json({ videoId: video.id, uploadUrl: upload.url });
   } catch {
-    await supabase.from('swing_videos').update({ status: 'error', mux_error_message: 'Upload could not be started' }).eq('id', video.id);
+    await supabase
+      .from('swing_videos')
+      .update({ status: 'error', mux_error_message: 'Upload could not be started' })
+      .eq('id', video.id);
     return NextResponse.json({ error: 'Upload could not be started' }, { status: 502 });
   }
 }
