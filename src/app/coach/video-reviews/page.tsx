@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { VideoStatusBadge } from '@/components/video/VideoStatusBadge';
+import { VideoStatusBadge } from '@/src/components/video/VideoStatusBadge';
 
 export default async function CoachVideoQueuePage() {
   const supabase = await createClient();
