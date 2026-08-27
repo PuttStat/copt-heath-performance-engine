@@ -1,0 +1,213 @@
+{
+  "version": 3,
+  "pages404": true,
+  "appType": "app",
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "onMatchHeaders": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/api/mux/webhook",
+      "regex": "^/api/mux/webhook(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/mux/webhook(?:/)?$"
+    },
+    {
+      "page": "/api/videos/uploads",
+      "regex": "^/api/videos/uploads(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/videos/uploads(?:/)?$"
+    },
+    {
+      "page": "/auth/callback",
+      "regex": "^/auth/callback(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/auth/callback(?:/)?$"
+    },
+    {
+      "page": "/auth/login",
+      "regex": "^/auth/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/auth/login(?:/)?$"
+    },
+    {
+      "page": "/coach",
+      "regex": "^/coach(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/coach(?:/)?$"
+    },
+    {
+      "page": "/coach/video-reviews",
+      "regex": "^/coach/video\\-reviews(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/coach/video\\-reviews(?:/)?$"
+    },
+    {
+      "page": "/diagnostics",
+      "regex": "^/diagnostics(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/diagnostics(?:/)?$"
+    },
+    {
+      "page": "/library",
+      "regex": "^/library(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/library(?:/)?$"
+    },
+    {
+      "page": "/performance",
+      "regex": "^/performance(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/performance(?:/)?$"
+    },
+    {
+      "page": "/pilot",
+      "regex": "^/pilot(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/pilot(?:/)?$"
+    },
+    {
+      "page": "/player/videos",
+      "regex": "^/player/videos(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/player/videos(?:/)?$"
+    },
+    {
+      "page": "/player/videos/upload",
+      "regex": "^/player/videos/upload(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/player/videos/upload(?:/)?$"
+    },
+    {
+      "page": "/players",
+      "regex": "^/players(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/players(?:/)?$"
+    },
+    {
+      "page": "/practice",
+      "regex": "^/practice(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/practice(?:/)?$"
+    },
+    {
+      "page": "/programme",
+      "regex": "^/programme(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/programme(?:/)?$"
+    },
+    {
+      "page": "/progress",
+      "regex": "^/progress(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/progress(?:/)?$"
+    },
+    {
+      "page": "/release",
+      "regex": "^/release(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/release(?:/)?$"
+    },
+    {
+      "page": "/rounds/detailed",
+      "regex": "^/rounds/detailed(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rounds/detailed(?:/)?$"
+    },
+    {
+      "page": "/rounds/new",
+      "regex": "^/rounds/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rounds/new(?:/)?$"
+    },
+    {
+      "page": "/sessions",
+      "regex": "^/sessions(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/sessions(?:/)?$"
+    },
+    {
+      "page": "/settings",
+      "regex": "^/settings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/settings(?:/)?$"
+    },
+    {
+      "page": "/sync",
+      "regex": "^/sync(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/sync(?:/)?$"
+    },
+    {
+      "page": "/trackman",
+      "regex": "^/trackman(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/trackman(?:/)?$"
+    },
+    {
+      "page": "/trackman/analysis",
+      "regex": "^/trackman/analysis(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/trackman/analysis(?:/)?$"
+    },
+    {
+      "page": "/trackman/diagnose",
+      "regex": "^/trackman/diagnose(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/trackman/diagnose(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": false,
+    "dynamicRSCPrerender": false
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}

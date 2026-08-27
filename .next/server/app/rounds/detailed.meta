@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/rounds/layout,_N_T_/rounds/detailed/layout,_N_T_/rounds/detailed/page,_N_T_/rounds/detailed"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/rounds/detailed/__PAGE__",
+    "/rounds/detailed",
+    "/rounds",
+    "/_index",
+    "/_head"
+  ]
+}

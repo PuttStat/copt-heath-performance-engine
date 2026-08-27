@@ -1,0 +1,3 @@
+module.exports=[27850,a=>{"use strict";var b=a.i(87924),c=a.i(72131),d=a.i(69240);a.s(["default",0,function(){let[a,e]=(0,c.useState)((0,d.hasSupabaseConfig)()?"Completing secure sign-in…":"Supabase is not configured.");return(0,c.useEffect)(()=>{let a=(0,d.getSupabaseBrowserClient)();if(!a)return;let b=new URLSearchParams(window.location.search).get("code");(b?a.auth.exchangeCodeForSession(b):a.auth.getSession()).then(({error:a})=>{a?e(a.message):window.location.replace("/")})},[]),(0,b.jsx)("main",{className:"auth-page",children:(0,b.jsxs)("section",{className:"auth-card",children:[(0,b.jsx)("span",{className:"brand-mark",children:"V"}),(0,b.jsx)("h1",{children:a})]})})}])}];
+
+//# sourceMappingURL=app_auth_callback_page_tsx_09fifb6._.js.map

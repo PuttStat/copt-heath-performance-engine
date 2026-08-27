@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/trackman/layout,_N_T_/trackman/analysis/layout,_N_T_/trackman/analysis/page,_N_T_/trackman/analysis"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/trackman/analysis/__PAGE__",
+    "/trackman/analysis",
+    "/trackman",
+    "/_index",
+    "/_head"
+  ]
+}
