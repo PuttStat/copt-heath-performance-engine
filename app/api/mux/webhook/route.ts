@@ -18,14 +18,26 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
   const passthrough = event.data?.passthrough;
-  const uploadId = event.data?.id;
+  const uploadId = event.type?.startsWith('video.upload.')
+    ? event.data?.id
+    : event.data?.upload_id;
   let videoId = passthrough as string | undefined;
 
   if (!videoId && uploadId) {
-    const { data } = await admin.from('swing_videos').select('id').eq('mux_upload_id', uploadId).maybeSingle();
+    const { data, error } = await admin
+      .from('swing_videos')
+      .select('id')
+      .eq('mux_upload_id', uploadId)
+      .maybeSingle();
+    if (error) {
+      return NextResponse.json({ error: 'Video lookup failed' }, { status: 500 });
+    }
     videoId = data?.id;
   }
-  if (!videoId) return NextResponse.json({ received: true });
+  if (!videoId && (passthrough || uploadId)) {
+    return NextResponse.json({ error: 'Video record not found' }, { status: 500 });
+  }
+  if (!videoId) return NextResponse.json({ received: true, ignored: true });
 
   if (event.type === 'video.upload.asset_created') {
     await admin.from('swing_videos').update({ status: 'processing', mux_asset_id: event.data.asset_id }).eq('id', videoId);
