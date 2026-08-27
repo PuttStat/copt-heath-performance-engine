@@ -22,7 +22,6 @@ export async function POST(request: Request) {
     .from('coach_player_links')
     .select('coach_id')
     .eq('player_id', user.id)
-    .eq('status', 'accepted')
     .limit(1)
     .maybeSingle();
 
