@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/src/lib/supabase/server';
 import { VideoUploadForm } from '@/src/components/video/VideoUploadForm';
 
 export default async function UploadSwingPage() {
