@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/src/lib/supabase/server';
 import { mux } from '@/src/lib/mux';
 
 const allowedTypes = new Set(['full_swing','pitching','chipping','bunker','putting']);
