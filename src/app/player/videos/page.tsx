@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { VideoStatusBadge } from '@/components/video/VideoStatusBadge';
+import { VideoStatusBadge } from '@/src/components/video/VideoStatusBadge';
 
 export default async function PlayerVideosPage() {
   const supabase = await createClient();
