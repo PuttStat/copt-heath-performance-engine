@@ -1,0 +1,3128 @@
+From 70d73af79e8377234454ce81bf9d517c8d0e46a9 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Fri, 28 Aug 2026 18:16:53 +0100
+Subject: [PATCH] Add 7I.2 swing analysis workspace
+
+---
+ PACKAGE_7I_2_SETUP.md                         | 192 ++++
+ PACKAGE_7I_2_VERIFICATION.md                  |  32 +
+ app/api/videos/[videoId]/analysis/route.ts    | 121 +++
+ app/api/videos/[videoId]/playback/route.ts    |  56 ++
+ app/coach/video-reviews/page.tsx              |   2 +
+ app/player/videos/[videoId]/page.tsx          |  15 +
+ app/player/videos/page.tsx                    |   1 +
+ package-lock.json                             |   7 +
+ package.json                                  |   2 +
+ public/sw.js                                  |   4 +-
+ src/components/video/AnalysisWorkspace.tsx    | 936 ++++++++++++++++++
+ src/components/video/DrawingOverlay.tsx       | 237 +++++
+ src/lib/video-access.ts                       |  97 ++
+ src/lib/video-analysis.ts                     | 132 +++
+ src/styles/package-7i2.css                    | 553 +++++++++++
+ ...8280001_package_7i_2_video_annotations.sql |  32 +
+ tests/video-analysis.test.mjs                 | 169 ++++
+ tests/video-api.test.mjs                      | 347 +++++++
+ 18 files changed, 2933 insertions(+), 2 deletions(-)
+ create mode 100644 PACKAGE_7I_2_SETUP.md
+ create mode 100644 PACKAGE_7I_2_VERIFICATION.md
+ create mode 100644 app/api/videos/[videoId]/analysis/route.ts
+ create mode 100644 app/api/videos/[videoId]/playback/route.ts
+ create mode 100644 app/player/videos/[videoId]/page.tsx
+ create mode 100644 src/components/video/AnalysisWorkspace.tsx
+ create mode 100644 src/components/video/DrawingOverlay.tsx
+ create mode 100644 src/lib/video-access.ts
+ create mode 100644 src/lib/video-analysis.ts
+ create mode 100644 src/styles/package-7i2.css
+ create mode 100644 supabase/migrations/202608280001_package_7i_2_video_annotations.sql
+ create mode 100644 tests/video-analysis.test.mjs
+ create mode 100644 tests/video-api.test.mjs
+
+diff --git a/PACKAGE_7I_2_SETUP.md b/PACKAGE_7I_2_SETUP.md
+new file mode 100644
+index 0000000..afd5914
+--- /dev/null
++++ b/PACKAGE_7I_2_SETUP.md
+@@ -0,0 +1,192 @@
++# Package 7I.2 — Swing Studio
++
++Built on the working 7I.1 recovery version (`31b4c2f`, Recover and reconcile Mux video assets). This adds the review workspace; it does not replace your upload or webhook implementation.
++
++## What is included
++
++- An **Open analysis** button on ready videos in the player library and coach review queue.
++- Private signed HLS playback, native HLS on Safari and hls.js on supported other browsers.
++- 0.1×, 0.25×, 0.5× and 1× playback; previous/next time-based frame steps; full timeline; a fine scrubber covering one second either side of a chosen moment; A–B loops.
++- Lines, arrows, ellipses/circles and three-point angle measurements. Select/move, colours, thickness, undo/redo, delete and clear.
++- Drawings tied to one moment or visible throughout the video; click their entries to return to that moment.
++- Saved drawings and notes, one layer per author. Players and authorised linked coaches can read one another's saved layers but can edit only their own. Saving a layer shares it; these are not private draft notes.
++- Optimistic revision checks stop an older browser tab overwriting a newer save.
++- Responsive layout and an expanded workspace. Video and drawings share the video's aspect ratio and normalized coordinates.
++
++Important precision limit: this is streamed-video analysis. Frame stepping seeks by time and is approximate for HLS and variable-frame-rate footage. It does not guarantee native 120/240-fps source access, reconstruct discarded frames, or provide frame-accurate reverse decoding. The UI displays the step rate and its source. Your existing Mux upload quality settings are unchanged.
++
++Not included in 7I.2: dual-video comparison, voiceover recording, exported annotated video, automatic swing diagnosis, or original-file frame decoding.
++
++## 1. Put the patch in the project root
++
++Download and unzip `Vector_Golf_Performance_7I_2.zip` on your Mac. Open the extracted folder.
++
++In Codespaces, the project root is **copt-heath-performance-engine**, the top folder in Explorer. It contains `package.json`, `app`, `src` and `supabase`.
++
++Drag `0001-Add-7I.2-swing-analysis-workspace.patch` into that top folder. Do not put it inside `.next`, `app`, or `src`.
++
++Open **Terminal → New Terminal**. The commands below go into that terminal, not into a code file, the chat panel or Supabase. Paste and run each block separately.
++
++```bash
++pwd
++```
++
++It should end in `/copt-heath-performance-engine`.
++
++```bash
++git status --short -- app src public package.json package-lock.json supabase tests
++```
++
++If this reports uncommitted changes in those source locations, stop and share the output before applying the patch. Do not discard your work. Changes under `.next` are generated build output and must not be committed with this package.
++
++If there are no source changes, update the branch:
++
++```bash
++git pull --ff-only
++```
++
++If this fails, stop. Do not force-push, reset, or attempt to resolve unknown conflicts.
++
++Check that the patch fits your current files:
++
++```bash
++git apply --check 0001-Add-7I.2-swing-analysis-workspace.patch
++```
++
++No output means the check passed. If it prints an error, stop and share that error; do not force the patch or re-upload 7I.1.
++
++Apply it:
++
++```bash
++git apply 0001-Add-7I.2-swing-analysis-workspace.patch
++```
++
++Then install the dependency version from the included lockfile:
++
++```bash
++npm ci
++```
++
++## 2. Add the new Supabase table
++
++Use the same Supabase project that contains your two ready videos.
++
++1. Open `supabase/migrations/202608280001_package_7i_2_video_annotations.sql` in Codespaces. The same SQL file is included separately in the downloaded ZIP.
++2. Select and copy the entire SQL file, including `begin;` and `commit;`.
++3. In Supabase, choose **SQL Editor**, open a **new query**, and paste the SQL contents. Do not paste the filename or terminal commands.
++4. Click **Run**. Expect success with no returned rows.
++5. In Table Editor, confirm `swing_video_annotations` exists. It will be empty until you save your first drawing.
++
++Run only this new migration. Do not rerun the old 7I.1 migration. The new migration uses your existing `coach_player_links` columns and does not assume a `status` column. It can be run again safely and does not delete videos, drawings or other programme data.
++
++Do not disable row-level security to resolve an error. If it fails, share the error text.
++
++## 3. Create a Mux signing key
++
++These are two NEW values. They are different from the upload API token and webhook signing secret.
++
++1. Open [Mux Signing Keys](https://dashboard.mux.com/settings/signing-keys).
++2. Select the **same Mux environment as the uploaded videos**. Your screenshots showed **Development**. A Vercel Production deployment can use that environment for this test; do not switch environments or recreate existing assets as part of this installation.
++3. Create a signing key. Copy its **ID** and **private key** securely when Mux shows them. Do not post the private key in chat or put it in GitHub.
++4. The private key may be supplied as base64-encoded PEM. Use the complete value Mux gives you; this code accepts base64 PEM or multiline PEM.
++
++Mux documents signing-key creation separately from API tokens in its [Signing JWTs guide](https://www.mux.com/docs/guides/signing-jwts).
++
++## 4. Add those two values to Vercel
++
++Open your Vector Golf Performance project → **Environment Variables** → **Add Environment Variable**.
++
++| Key                       | Value                                         | Type   | Vercel environment |
++| ------------------------- | --------------------------------------------- | ------ | ------------------ |
++| `MUX_SIGNING_KEY_ID`      | ID of the new Mux signing key                 | Secret | Production         |
++| `MUX_SIGNING_PRIVATE_KEY` | Complete private key of that same signing key | Secret | Production         |
++
++Save both. For a preview deployment, also configure its Preview environment deliberately using matching Mux credentials. Do not prefix either variable with `NEXT_PUBLIC_`.
++
++Keep the working existing variables: `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_WEBHOOK_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `NEXT_PUBLIC_APP_URL`. Do not replace them with signing keys.
++
++No extra secrets are required merely to compile the new code in Codespaces. The live playback endpoint checks signing configuration when a user opens a video.
++
++## 5. Test the code and deploy
++
++Back in the Codespaces terminal:
++
++```bash
++npm run test:video
++```
++
++Expect 16 passing tests. Then:
++
++```bash
++npm run build
++```
++
++Expect a successful build with `/player/videos/[videoId]` and the new `/api/videos/[videoId]/analysis` and `/playback` routes. If either command fails, stop before committing and share the error.
++
++Stage only the package files. This deliberately avoids `.next`, `node_modules` and any credentials. Run the following as one block, preserving the backslashes:
++
++```bash
++git add -- package.json package-lock.json public/sw.js \
++  app/player/videos/page.tsx app/coach/video-reviews/page.tsx \
++  'app/player/videos/[videoId]/page.tsx' \
++  'app/api/videos/[videoId]/analysis/route.ts' \
++  'app/api/videos/[videoId]/playback/route.ts' \
++  src/components/video/AnalysisWorkspace.tsx src/components/video/DrawingOverlay.tsx \
++  src/lib/video-analysis.ts src/lib/video-access.ts src/styles/package-7i2.css \
++  supabase/migrations/202608280001_package_7i_2_video_annotations.sql \
++  tests/video-analysis.test.mjs tests/video-api.test.mjs \
++  PACKAGE_7I_2_SETUP.md PACKAGE_7I_2_VERIFICATION.md
++```
++
++Inspect what will be committed:
++
++```bash
++git diff --cached --stat
++```
++
++Expect only the files named above. If you see `.next`, `node_modules`, private keys or unrelated files, stop rather than committing them.
++
++```bash
++git commit -m "Add 7I.2 swing analysis workspace"
++```
++
++```bash
++git push
++```
++
++If rejected, stop and share the message. Never use force-push for this installation.
++
++In Vercel, wait for the deployment for **Add 7I.2 swing analysis workspace** to show **Ready**. Because the new variables were added before pushing, that deployment should receive them. If you added the variables afterward, redeploy that same latest commit once.
++
++## 6. Verify one existing video
++
++1. Open [My swing videos](https://app.vectorgolfperformance.co.uk/player/videos) and sign in normally.
++2. Refresh the page. If old UI persists, close the app tabs and reopen it so the updated service worker can take control. Do not clear all site data; this app also contains programme data.
++3. Click **Open analysis** on one ready video. No re-upload is needed.
++4. Confirm the actual golf video plays. Try 0.25×, then pause, Next frame and Previous frame.
++5. Use the full slider to reach impact; select **Centre here** and try the fine scrubber. The small slider is a ±1-second window, not an extra video.
++6. With the video paused, choose **Line** and drag over it. Choose **Angle** and tap start, vertex, end.
++7. Add a note, click **Save drawings & notes**, then reload. Confirm the drawings and note return. Click a saved moment to return to its timestamp.
++8. In a second tab, edit the same layer. Save in the first tab, then attempt to save the older second tab. It should report a conflict rather than overwrite the first save.
++9. Log in as an authorised linked coach and open [Coach video reviews](https://app.vectorgolfperformance.co.uk/coach/video-reviews). The player's saved layer should be read-only; the coach can create a separate layer.
++10. A different, unlinked account must not be able to open the same video URL. Do not treat a working owner account as proof that access control is configured correctly.
++11. Test on your actual iPhone/iPad Safari too, especially portrait clips and drawing alignment after rotating the device.
++
++Only call 7I.2 live-verified after these checks. A Ready deployment or successful unit test does not prove live media playback.
++
++## Troubleshooting
++
++| Message or symptom                            | Next check                                                                                                                          |
++| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
++| Drawings could not be loaded; check migration | Run the new 7I.2 SQL in the correct Supabase project.                                                                               |
++| Secure playback needs signing variables       | Check both exact Vercel names, Production scope, then redeploy.                                                                     |
++| Stream cannot play                            | Confirm the key ID and private key are a pair from the asset's Mux environment. Do not change videos to public playback.            |
++| Asset could not be securely matched           | Stop and inspect reconciliation/asset passthrough. Do not bypass the match or manually copy another playback ID.                    |
++| Video not found for a coach                   | Confirm the coach role and existing coach-player link. An unrelated administrator is not given blanket access.                      |
++| Another tab saved newer drawings              | Copy any unsaved notes, reload the stale tab, then reapply the intended changes.                                                    |
++| Playback expires during a long session        | Use Refresh playback. The drawings remain in the editor. Already issued playback URLs can remain valid until their one-hour expiry. |
++| Ready but no Open analysis button             | Verify the latest code commit deployed, then reload/close old app tabs.                                                             |
++
++## Rollback
++
++If the new viewer causes trouble, use Vercel to restore the previous known-good deployment. Keep the additive annotation table and its rows; there is no need to delete data. The package does not remove the original video library, upload endpoint, webhook or reconciliation code. Do not roll back by deleting the repository or rerunning older database migrations.
+diff --git a/PACKAGE_7I_2_VERIFICATION.md b/PACKAGE_7I_2_VERIFICATION.md
+new file mode 100644
+index 0000000..eef9b11
+--- /dev/null
++++ b/PACKAGE_7I_2_VERIFICATION.md
+@@ -0,0 +1,32 @@
++# 7I.2 verification and handover
++
++## Scope
++
++New secure single-video review workspace, four annotation tools, slow playback and fine time scrubbing, persisted author layers and notes. The working 7I.1 upload/webhook/recovery logic is retained. Existing videos remain signed; no public playback IDs are created.
++
++## Checks performed in the development workspace
++
++- Production `npm run build`: passed, including TypeScript and the new dynamic page/API routes, without requiring live Mux signing credentials at build time.
++- `npm run test:video`: 16 automated tests covering geometry, validation, timestamp bounds, role/link access, authentication failures, stale revisions, server-owned authors, payload limits, missing-table errors, private response headers, asset matching, and the installed Mux SDK's local JWT signing with generated test keys.
++- React DOM fixture: line drawing, three-point angle, undo/redo, save/reload, next-frame time movement, moment visibility/bookmark restoration, play/pause state, and read-only shared layers passed. The fixture mocks media playback and backend requests: this is not a real-browser streaming test.
++- Temporary PGlite PostgreSQL fixture: the exact new SQL migration applied twice; owner/linked-coach reads passed; unrelated and anonymous reads were denied; direct authenticated writes were denied; removing the link removed read access. This uses a minimal representative schema, not the live Supabase database.
++- Patch application checked against the 7I.1 recovery baseline. Generated build output and credentials are excluded from the package.
++
++## Live checks still required
++
++- Add the new table and Mux signing credentials in the intended environments.
++- Real authenticated Mux playback and seeking on desktop and iPhone/iPad Safari; portrait drawing alignment and device rotation.
++- Actual player/coach/unlinked-account access and save/reload behaviour against your live Supabase policies.
++- Confirm a fresh upload still reaches ready and opens in the studio.
++
++The browser-control session was unavailable during this build. No real-browser visual or live Mux playback verification is claimed. The database migration has not been run on production and the package has not been pushed or deployed to your live project.
++
++## Security and operational notes
++
++- Both new endpoints verify the bearer token with Supabase and check ownership or an explicit linked coach/admin relationship. Client-supplied author IDs are not used for saves.
++- Playback checks the authoritative Mux asset's passthrough against the video UUID before signing; a changed database playback ID cannot directly obtain a token for a different asset.
++- URLs expire after one hour. They are bearer capabilities during their validity, not DRM; access revocation prevents new URLs but cannot instantly revoke one already issued.
++- API responses use private/no-store headers. The updated service worker bypasses APIs and bearer-authenticated requests, and retires its two old named shell caches.
++- Annotation writes are server-only, validated, size-limited, scoped by author, and revision-checked. Existing broader profile/coaching-link/video policies are not rewritten; review these separately before a wider launch.
++- Notes/drawings are shared on explicit Save. Unsaved changes live in memory and can be lost on a crash; the editor warns on ordinary page departure. There is no offline annotation sync or burned-in video export.
++- Frame stepping is time-based and approximate for streamed/VFR footage. The implementation does not promise original 120/240-fps access.
+diff --git a/app/api/videos/[videoId]/analysis/route.ts b/app/api/videos/[videoId]/analysis/route.ts
+new file mode 100644
+index 0000000..27465a0
+--- /dev/null
++++ b/app/api/videos/[videoId]/analysis/route.ts
+@@ -0,0 +1,121 @@
++import {
++  privateJson,
++  requireVideoAccess,
++  videoApi,
++  VideoApiError,
++} from "@/src/lib/video-access";
++import { validateDocument } from "@/src/lib/video-analysis";
++export const runtime = "nodejs";
++type Context = { params: Promise<{ videoId: string }> };
++
++export async function GET(request: Request, context: Context) {
++  return videoApi(async () => {
++    const { admin, user, video } = await requireVideoAccess(
++      request,
++      (await context.params).videoId,
++    );
++    const { data, error } = await admin
++      .from("swing_video_annotations")
++      .select("author_id,revision,document,updated_at")
++      .eq("video_id", video.id)
++      .order("updated_at");
++    if (error)
++      throw new VideoApiError(
++        503,
++        "Drawings could not be loaded. Check that the 7I.2 Supabase migration has been run.",
++      );
++    return privateJson({
++      userId: user.id,
++      video: {
++        id: video.id,
++        title: video.title,
++        club: video.club,
++        camera_view: video.camera_view,
++        swing_type: video.swing_type,
++        status: video.status,
++        player_question: video.player_question,
++        duration: Number(video.duration_seconds) || null,
++        aspect_ratio: video.aspect_ratio,
++        isOwner: user.id === video.player_id,
++      },
++      annotations: data,
++    });
++  });
++}
++async function readBody(request: Request) {
++  const reader = request.body?.getReader();
++  if (!reader) throw new VideoApiError(400, "Missing drawings.");
++  const chunks: Uint8Array[] = [];
++  let length = 0;
++  try {
++    while (true) {
++      const { done, value } = await reader.read();
++      if (done) break;
++      length += value.byteLength;
++      if (length > 100000) {
++        await reader.cancel();
++        throw new VideoApiError(413, "Drawing document is too large.");
++      }
++      chunks.push(value);
++    }
++  } finally {
++    reader.releaseLock();
++  }
++  try {
++    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
++  } catch {
++    throw new VideoApiError(400, "Invalid drawing document.");
++  }
++}
++export async function PUT(request: Request, context: Context) {
++  return videoApi(async () => {
++    const { admin, user, video } = await requireVideoAccess(
++      request,
++      (await context.params).videoId,
++    );
++    const body = await readBody(request);
++    const duration = Number(video.duration_seconds);
++    if (
++      !body ||
++      !Number.isInteger(body.revision) ||
++      body.revision < 0 ||
++      body.revision > 2147483645 ||
++      !validateDocument(
++        body.document,
++        Number.isFinite(duration) && duration > 0 ? duration : 86400,
++      )
++    )
++      throw new VideoApiError(400, "Invalid drawings, notes or revision.");
++    // The author always comes from the verified session, never from the request body.
++    const values = {
++      document: body.document,
++      revision: body.revision + 1,
++      updated_at: new Date().toISOString(),
++    };
++    const query =
++      body.revision === 0
++        ? admin
++            .from("swing_video_annotations")
++            .insert({ ...values, video_id: video.id, author_id: user.id })
++        : admin
++            .from("swing_video_annotations")
++            .update(values)
++            .eq("video_id", video.id)
++            .eq("author_id", user.id)
++            .eq("revision", body.revision);
++    const { data, error } = await query
++      .select("author_id,revision,document,updated_at")
++      .maybeSingle();
++    if (error?.code === "23505" || (!error && !data))
++      throw new VideoApiError(
++        409,
++        "Another tab saved newer drawings. Copy your notes, then reload before editing again.",
++      );
++    if (error)
++      throw new VideoApiError(
++        503,
++        "Drawings could not be saved. Your changes are still on this page.",
++      );
++    return privateJson(data);
++  });
++}
+diff --git a/app/api/videos/[videoId]/playback/route.ts b/app/api/videos/[videoId]/playback/route.ts
+new file mode 100644
+index 0000000..eebc563
+--- /dev/null
++++ b/app/api/videos/[videoId]/playback/route.ts
+@@ -0,0 +1,56 @@
++import { getMux } from "@/src/lib/mux";
++import {
++  privateJson,
++  requireVideoAccess,
++  videoApi,
++  VideoApiError,
++} from "@/src/lib/video-access";
++export const runtime = "nodejs";
++export async function POST(
++  request: Request,
++  context: { params: Promise<{ videoId: string }> },
++) {
++  return videoApi(async () => {
++    const { video } = await requireVideoAccess(
++      request,
++      (await context.params).videoId,
++    );
++    if (video.status !== "ready" || !video.mux_asset_id)
++      throw new VideoApiError(409, "This video is not ready for playback yet.");
++    const keyId = process.env.MUX_SIGNING_KEY_ID,
++      keySecret = process.env.MUX_SIGNING_PRIVATE_KEY;
++    if (!keyId || !keySecret)
++      throw new VideoApiError(
++        503,
++        "Secure playback needs MUX_SIGNING_KEY_ID and MUX_SIGNING_PRIVATE_KEY in Vercel.",
++      );
++    const mux = getMux();
++    const asset = await mux.video.assets.retrieve(video.mux_asset_id);
++    // Asset ownership must come from Mux, not a player-editable database playback ID.
++    if (asset.passthrough !== video.id)
++      throw new VideoApiError(
++        409,
++        "The video asset could not be securely matched. Ask your administrator to reconcile this upload.",
++      );
++    const playback = asset.playback_ids?.find(
++      (item) => item.policy === "signed",
++    );
++    if (asset.status !== "ready" || !playback)
++      throw new VideoApiError(
++        409,
++        "Signed playback is not available for this asset.",
++      );
++    const token = await mux.jwt.signPlaybackId(playback.id, {
++      keyId,
++      keySecret: keySecret.replace(/\\n/g, "\n"),
++      type: "video",
++      expiration: "1h",
++    });
++    return privateJson({
++      url: `https://stream.mux.com/${playback.id}.m3u8?token=${token}`,
++      expiresAt: Date.now() + 3600000,
++      fps: asset.max_stored_frame_rate ?? null,
++      duration: asset.duration ?? null,
++    });
++  });
++}
+diff --git a/app/coach/video-reviews/page.tsx b/app/coach/video-reviews/page.tsx
+index 64860d0..ea790aa 100644
+--- a/app/coach/video-reviews/page.tsx
++++ b/app/coach/video-reviews/page.tsx
+@@ -1,6 +1,7 @@
+ 'use client';
+ 
+ import { useEffect, useState } from 'react';
++import Link from 'next/link';
+ import { AuthGate } from '@/app/ui/auth-gate';
+ import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+ import { VideoStatusBadge } from '@/src/components/video/VideoStatusBadge';
+@@ -89,6 +90,7 @@ export default function CoachVideoQueuePage() {
+                   <h2>{video.player_name} · {video.club}</h2>
+                   <p>{video.swing_type.replaceAll('_', ' ')} · {video.camera_view.replaceAll('_', ' ')}</p>
+                   {video.player_question && <blockquote>{video.player_question}</blockquote>}
++                  {video.status === 'ready' && <Link className="primary-button" style={{display:'inline-block',marginTop:16}} href={`/player/videos/${video.id}`}>Open analysis →</Link>}
+                 </div>
+                 <time>{new Date(video.created_at).toLocaleDateString('en-GB')}</time>
+               </article>
+diff --git a/app/player/videos/[videoId]/page.tsx b/app/player/videos/[videoId]/page.tsx
+new file mode 100644
+index 0000000..6db3eb2
+--- /dev/null
++++ b/app/player/videos/[videoId]/page.tsx
+@@ -0,0 +1,15 @@
++import { AuthGate } from "@/app/ui/auth-gate";
++import { AnalysisWorkspace } from "@/src/components/video/AnalysisWorkspace";
++import "@/src/styles/package-7i2.css";
++export default async function SwingAnalysisPage({
++  params,
++}: {
++  params: Promise<{ videoId: string }>;
++}) {
++  const { videoId } = await params;
++  return (
++    <AuthGate>
++      <AnalysisWorkspace key={videoId} videoId={videoId} />
++    </AuthGate>
++  );
++}
+diff --git a/app/player/videos/page.tsx b/app/player/videos/page.tsx
+index cc24c36..1a29241 100644
+--- a/app/player/videos/page.tsx
++++ b/app/player/videos/page.tsx
+@@ -92,6 +92,7 @@ export default function PlayerVideosPage() {
+                 <p>{video.camera_view.replaceAll('_', ' ')}</p>
+                 <small>{new Date(video.created_at).toLocaleDateString('en-GB')}</small>
+                 {video.player_question && <p>{video.player_question}</p>}
++                {video.status === 'ready' && <Link className="primary-button" style={{display:'inline-block',marginTop:16}} href={`/player/videos/${video.id}`}>Open analysis →</Link>}
+               </article>
+             ))}
+           </section>
+diff --git a/package-lock.json b/package-lock.json
+index 1a7516a..48dc68f 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -13,6 +13,7 @@
+         "@supabase/ssr": "^0.12.4",
+         "@supabase/supabase-js": "^2.112.3",
+         "drizzle-orm": "0.45.2",
++        "hls.js": "1.6.16",
+         "next": "16.2.6",
+         "react": "19.2.6",
+         "react-dom": "19.2.6"
+@@ -6872,6 +6873,12 @@
+         "url": "https://github.com/sponsors/sindresorhus"
+       }
+     },
++    "node_modules/hls.js": {
++      "version": "1.6.16",
++      "resolved": "https://registry.npmjs.org/hls.js/-/hls.js-1.6.16.tgz",
++      "integrity": "sha512-VSIRpLfRwlAAdGL4wiTucx2ScRipo0ed1FBatWkyt832jC4CReKstga6yIhYVwGu9LOBjuX9wzmRMeQdBJtzEA==",
++      "license": "Apache-2.0"
++    },
+     "node_modules/iceberg-js": {
+       "version": "0.8.1",
+       "resolved": "https://registry.npmjs.org/iceberg-js/-/iceberg-js-0.8.1.tgz",
+diff --git a/package.json b/package.json
+index c811413..72da1bb 100644
+--- a/package.json
++++ b/package.json
+@@ -11,6 +11,7 @@
+     "build": "next build",
+     "start": "next start",
+     "test": "npm run build",
++    "test:video": "node --experimental-strip-types --test tests/video-analysis.test.mjs tests/video-api.test.mjs",
+     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern worker --ignore-pattern build --ignore-pattern examples --ignore-pattern db",
+     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
+   },
+@@ -20,6 +21,7 @@
+     "@supabase/ssr": "^0.12.4",
+     "@supabase/supabase-js": "^2.112.3",
+     "drizzle-orm": "0.45.2",
++    "hls.js": "1.6.16",
+     "next": "16.2.6",
+     "react": "19.2.6",
+     "react-dom": "19.2.6"
+diff --git a/public/sw.js b/public/sw.js
+index 5e6efaa..2fb37ee 100644
+--- a/public/sw.js
++++ b/public/sw.js
+@@ -1,5 +1,5 @@
+-const CACHE='vector-golf-shell-v2';const OLD=['vector-golf-shell-v1'];const SHELL=['/','/rounds/new','/rounds/detailed','/performance','/practice','/programme','/progress','/sync','/manifest.webmanifest'];
++const CACHE='vector-golf-shell-v3';const OLD=['vector-golf-shell-v1','vector-golf-shell-v2'];const SHELL=['/','/rounds/new','/rounds/detailed','/performance','/practice','/programme','/progress','/sync','/manifest.webmanifest'];
+ self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)))});
+ self.addEventListener('activate',event=>event.waitUntil(Promise.all([self.clients.claim(),...OLD.map(name=>caches.delete(name))])));
+-self.addEventListener('fetch',event=>{if(event.request.method!=='GET')return;const url=new URL(event.request.url);if(url.origin!==self.location.origin)return;if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).then(response=>{const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy));return response}).catch(()=>caches.match(event.request).then(hit=>hit||caches.match('/'))));return}event.respondWith(caches.match(event.request).then(hit=>hit||fetch(event.request).then(response=>{if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy))}return response})))});
++self.addEventListener('fetch',event=>{if(event.request.method!=='GET')return;const url=new URL(event.request.url);if(url.origin!==self.location.origin||url.pathname.startsWith('/api/')||event.request.headers.has('Authorization'))return;if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).then(response=>{const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy));return response}).catch(()=>caches.match(event.request).then(hit=>hit||caches.match('/'))));return}event.respondWith(caches.match(event.request).then(hit=>hit||fetch(event.request).then(response=>{if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy))}return response})))});
+ self.addEventListener('sync',event=>{if(event.tag==='vector-golf-sync')event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(clients=>Promise.all(clients.map(client=>client.postMessage({type:'SYNC_REQUEST'})))))});
+diff --git a/src/components/video/AnalysisWorkspace.tsx b/src/components/video/AnalysisWorkspace.tsx
+new file mode 100644
+index 0000000..e3be7de
+--- /dev/null
++++ b/src/components/video/AnalysisWorkspace.tsx
+@@ -0,0 +1,936 @@
++"use client";
++import Link from "next/link";
++import {
++  useCallback,
++  useEffect,
++  useRef,
++  useState,
++  type KeyboardEvent,
++} from "react";
++import Hls from "hls.js";
++import { getSupabaseBrowserClient } from "@/lib/supabase/client";
++import { DrawingOverlay } from "./DrawingOverlay";
++import {
++  DRAWING_COLORS,
++  DRAWING_TOOLS,
++  clamp,
++  drawingVisible,
++  emptyDocument,
++  formatTime,
++  stepTime,
++  type AnalysisDocument,
++  type AnnotationSet,
++  type Drawing,
++  type DrawingTool,
++} from "@/src/lib/video-analysis";
++type VideoInfo = {
++  id: string;
++  title: string | null;
++  club: string;
++  camera_view: string;
++  swing_type: string;
++  status: string;
++  player_question: string | null;
++  duration: number | null;
++  aspect_ratio: string | null;
++  isOwner: boolean;
++};
++type AnalysisResponse = {
++  userId: string;
++  video: VideoInfo;
++  annotations: AnnotationSet[];
++};
++type Playback = {
++  url: string;
++  expiresAt: number;
++  fps: number | null;
++  duration: number | null;
++};
++async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
++  const supabase = getSupabaseBrowserClient();
++  if (!supabase) throw new Error("Video authentication is not configured.");
++  let authTimer: number | undefined;
++  const {
++    data: { session },
++  } = await Promise.race([
++    supabase.auth.getSession(),
++    new Promise<never>((_resolve, reject) => {
++      authTimer = window.setTimeout(
++        () =>
++          reject(
++            new Error("Sign-in is taking too long. Reload and sign in again."),
++          ),
++        15000,
++      );
++    }),
++  ]).finally(() => window.clearTimeout(authTimer));
++  if (!session) throw new Error("Please sign in again to continue.");
++  const controller = new AbortController(),
++    timer = window.setTimeout(() => controller.abort(), 25000);
++  try {
++    const response = await fetch(path, {
++      ...options,
++      cache: "no-store",
++      signal: controller.signal,
++      headers: {
++        "Content-Type": "application/json",
++        ...options.headers,
++        Authorization: `Bearer ${session.access_token}`,
++      },
++    });
++    const body = await response.json();
++    if (!response.ok)
++      throw new Error(body.error || "The request failed. Please try again.");
++    return body as T;
++  } catch (error) {
++    if (error instanceof Error && error.name === "AbortError")
++      throw new Error("The request timed out. Please try again.");
++    throw error;
++  } finally {
++    window.clearTimeout(timer);
++  }
++}
++const message = (error: unknown) =>
++  error instanceof Error ? error.message : "Please try again.";
++export function AnalysisWorkspace({ videoId }: { videoId: string }) {
++  const [info, setInfo] = useState<AnalysisResponse | null>(null),
++    [loadError, setLoadError] = useState("");
++  const [playback, setPlayback] = useState<Playback | null>(null),
++    [playbackError, setPlaybackError] = useState("");
++  const [mediaReady, setMediaReady] = useState(false),
++    [requestingPlayback, setRequestingPlayback] = useState(false);
++  const [time, setTime] = useState(0),
++    [duration, setDuration] = useState(0),
++    [aspect, setAspect] = useState(16 / 9);
++  const [fps, setFps] = useState(30),
++    [fpsSource, setFpsSource] = useState("estimate"),
++    [playing, setPlaying] = useState(false),
++    [rate, setRate] = useState(0.25);
++  const [fineAnchor, setFineAnchor] = useState(0),
++    [loopStart, setLoopStart] = useState<number | null>(null),
++    [loopEnd, setLoopEnd] = useState<number | null>(null),
++    [loop, setLoop] = useState(false),
++    [expanded, setExpanded] = useState(false);
++  const [tool, setTool] = useState<DrawingTool | "select">("select"),
++    [color, setColor] = useState<string>(DRAWING_COLORS[0]),
++    [width, setWidth] = useState(3),
++    [scope, setScope] = useState<"frame" | "video">("frame");
++  const [selected, setSelected] = useState<string | null>(null),
++    [layer, setLayer] = useState("mine"),
++    [showDrawing, setShowDrawing] = useState(true);
++  const [doc, setDoc] = useState<AnalysisDocument>(emptyDocument),
++    [past, setPast] = useState<AnalysisDocument[]>([]),
++    [future, setFuture] = useState<AnalysisDocument[]>([]);
++  const [revision, setRevision] = useState(0),
++    [saved, setSaved] = useState(JSON.stringify(emptyDocument())),
++    [saving, setSaving] = useState(false),
++    [saveMessage, setSaveMessage] = useState("");
++  const video = useRef<HTMLVideoElement>(null),
++    restoreTime = useRef(0);
++  const dirty = JSON.stringify(doc) !== saved,
++    readOnly = layer !== "mine";
++  useEffect(() => {
++    let active = true;
++    api<AnalysisResponse>(`/api/videos/${videoId}/analysis`)
++      .then((data) => {
++        if (!active) return;
++        setInfo(data);
++        const mine = data.annotations.find((s) => s.author_id === data.userId),
++          initial = mine?.document ?? emptyDocument();
++        setDoc(initial);
++        setSaved(JSON.stringify(initial));
++        setRevision(mine?.revision ?? 0);
++      })
++      .catch((error) => {
++        if (active) setLoadError(message(error));
++      });
++    return () => {
++      active = false;
++    };
++  }, [videoId]);
++  const refreshPlayback = useCallback(async () => {
++    setRequestingPlayback(true);
++    setPlaybackError("");
++    restoreTime.current = video.current?.currentTime ?? restoreTime.current;
++    try {
++      setPlayback(
++        await api<Playback>(`/api/videos/${videoId}/playback`, {
++          method: "POST",
++        }),
++      );
++    } catch (error) {
++      setPlaybackError(message(error));
++    } finally {
++      setRequestingPlayback(false);
++    }
++  }, [videoId]);
++  useEffect(() => {
++    if (info?.video.status === "ready") void refreshPlayback();
++  }, [info?.video.status, refreshPlayback]);
++  useEffect(() => {
++    const media = video.current;
++    if (!media || !playback) return;
++    setMediaReady(false);
++    setPlaying(false);
++    setFps(playback.fps && playback.fps > 0 ? playback.fps : 30);
++    setFpsSource(playback.fps ? "Mux maximum" : "estimate");
++    let hls: Hls | null = null;
++    const loaded = () => {
++      if (Number.isFinite(media.duration)) setDuration(media.duration);
++      if (media.videoWidth && media.videoHeight)
++        setAspect(media.videoWidth / media.videoHeight);
++      media.currentTime = Math.min(restoreTime.current, media.duration || 0);
++      setTime(media.currentTime);
++      setFineAnchor(media.currentTime);
++      setMediaReady(true);
++    };
++    media.addEventListener("loadedmetadata", loaded);
++    if (media.canPlayType("application/vnd.apple.mpegurl"))
++      media.src = playback.url;
++    else if (Hls.isSupported()) {
++      hls = new Hls({ maxBufferLength: 30 });
++      hls.on(Hls.Events.ERROR, (_event, data) => {
++        if (data.fatal)
++          setPlaybackError(
++            "Playback could not load. Check your connection or refresh secure playback.",
++          );
++      });
++      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
++        const frameRate = hls?.levels[data.level]?.frameRate;
++        if (frameRate) {
++          setFps(frameRate);
++          setFpsSource("stream");
++        }
++      });
++      hls.loadSource(playback.url);
++      hls.attachMedia(media);
++    } else
++      setPlaybackError(
++        "This browser does not support this video stream. Use Safari, Chrome, Firefox or Edge.",
++      );
++    return () => {
++      media.pause();
++      media.removeEventListener("loadedmetadata", loaded);
++      hls?.destroy();
++      media.removeAttribute("src");
++      media.load();
++    };
++  }, [playback]);
++  useEffect(() => {
++    if (!playback) return;
++    const timer = window.setTimeout(
++      () => {
++        video.current?.pause();
++        setPlaybackError(
++          "Your secure playback link has expired. Refresh playback to continue; your drawings are unchanged.",
++        );
++      },
++      Math.max(0, playback.expiresAt - Date.now()),
++    );
++    return () => window.clearTimeout(timer);
++  }, [playback]);
++  useEffect(() => {
++    const media = video.current;
++    if (!media) return;
++    let id = 0;
++    const tick = () => {
++      setTime(media.currentTime);
++      if (
++        loop &&
++        loopStart !== null &&
++        loopEnd !== null &&
++        media.currentTime >= loopEnd
++      )
++        media.currentTime = loopStart;
++      if (!media.paused) id = window.requestAnimationFrame(tick);
++    };
++    if (playing) id = window.requestAnimationFrame(tick);
++    return () => window.cancelAnimationFrame(id);
++  }, [playing, loop, loopStart, loopEnd]);
++  useEffect(() => {
++    if (!dirty) return;
++    const warn = (event: BeforeUnloadEvent) => {
++      event.preventDefault();
++      event.returnValue = "";
++    };
++    window.addEventListener("beforeunload", warn);
++    return () => window.removeEventListener("beforeunload", warn);
++  }, [dirty]);
++  function edit(next: AnalysisDocument) {
++    setPast((history) => [...history.slice(-49), doc]);
++    setDoc(next);
++    setFuture([]);
++    setSaveMessage("");
++  }
++  function undo() {
++    if (!past.length) return;
++    setFuture((history) => [doc, ...history]);
++    setDoc(past[past.length - 1]);
++    setPast(past.slice(0, -1));
++    setSelected(null);
++  }
++  function redo() {
++    if (!future.length) return;
++    setPast((history) => [...history, doc]);
++    setDoc(future[0]);
++    setFuture(future.slice(1));
++    setSelected(null);
++  }
++  async function save() {
++    if (saving || readOnly) return;
++    const snapshot = doc;
++    setSaving(true);
++    setSaveMessage("");
++    try {
++      const result = await api<AnnotationSet>(
++        `/api/videos/${videoId}/analysis`,
++        {
++          method: "PUT",
++          body: JSON.stringify({ document: snapshot, revision }),
++        },
++      );
++      setRevision(result.revision);
++      setSaved(JSON.stringify(snapshot));
++      setSaveMessage("Saved. Shared with the player and authorised coaches.");
++    } catch (error) {
++      setSaveMessage(message(error));
++    } finally {
++      setSaving(false);
++    }
++  }
++  function pause() {
++    video.current?.pause();
++  }
++  function seek(target: number, centre = false) {
++    const media = video.current;
++    if (!media || !mediaReady) return;
++    media.pause();
++    media.currentTime = clamp(target, 0, duration);
++    setTime(media.currentTime);
++    if (centre) setFineAnchor(media.currentTime);
++    setSelected(null);
++  }
++  async function togglePlay() {
++    const media = video.current;
++    if (!media || !mediaReady) return;
++    if (!media.paused) {
++      media.pause();
++      return;
++    }
++    if (
++      loop &&
++      loopStart !== null &&
++      loopEnd !== null &&
++      (media.currentTime < loopStart || media.currentTime >= loopEnd)
++    )
++      media.currentTime = loopStart;
++    try {
++      media.playbackRate = rate;
++      await media.play();
++    } catch {
++      setPlaybackError(
++        "This playback speed could not start. Try 0.25× or use frame stepping.",
++      );
++    }
++  }
++  function setSpeed(value: number) {
++    try {
++      if (video.current) video.current.playbackRate = value;
++      setRate(value);
++    } catch {
++      setPlaybackError(
++        "This browser does not support that speed. Use frame stepping instead.",
++      );
++    }
++  }
++  function add(shape: Drawing) {
++    if (doc.shapes.length >= 100) {
++      setSaveMessage(
++        "Maximum 100 drawings per layer. Delete a drawing before adding another.",
++      );
++      return;
++    }
++    edit({ ...doc, shapes: [...doc.shapes, shape] });
++    setSelected(shape.id);
++  }
++  function removeSelected() {
++    if (selected && !readOnly) {
++      edit({ ...doc, shapes: doc.shapes.filter((s) => s.id !== selected) });
++      setSelected(null);
++    }
++  }
++  function keyboard(event: KeyboardEvent<HTMLElement>) {
++    if ((event.target as HTMLElement).closest("input,textarea,select,button,a"))
++      return;
++    if (event.key === " ") {
++      event.preventDefault();
++      void togglePlay();
++    }
++    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
++      event.preventDefault();
++      seek(
++        stepTime(
++          video.current?.currentTime ?? time,
++          (event.key === "ArrowLeft" ? -1 : 1) * (event.shiftKey ? 10 : 1),
++          fps,
++          duration,
++        ),
++      );
++    }
++    if (event.key === "Delete" || event.key === "Backspace") {
++      event.preventDefault();
++      removeSelected();
++    }
++    if (event.key === "Escape") {
++      setTool("select");
++      setSelected(null);
++      setExpanded(false);
++    }
++    if (
++      (event.ctrlKey || event.metaKey) &&
++      event.key.toLowerCase() === "z" &&
++      !readOnly
++    ) {
++      event.preventDefault();
++      if (event.shiftKey) redo();
++      else undo();
++    }
++    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
++      event.preventDefault();
++      void save();
++    }
++  }
++  const activeDocument =
++    layer === "mine"
++      ? doc
++      : (info?.annotations.find((s) => s.author_id === layer)?.document ??
++        emptyDocument());
++  const visible = showDrawing
++    ? activeDocument.shapes.filter((s) => drawingVisible(s, time, fps))
++    : [];
++  const fineMin = Math.max(0, fineAnchor - 1),
++    fineMax = Math.min(duration, fineAnchor + 1);
++  if (loadError)
++    return (
++      <main className="swing-studio">
++        <div className="swing-notice" role="alert">
++          <h1>Video unavailable</h1>
++          <p>{loadError}</p>
++          <Link href="/player/videos">Back to my videos</Link>
++          <button onClick={() => window.location.reload()}>Try again</button>
++        </div>
++      </main>
++    );
++  if (!info)
++    return (
++      <main className="swing-studio">
++        <p role="status">Opening your analysis workspace…</p>
++      </main>
++    );
++  return (
++    <main
++      className={`swing-studio ${expanded ? "swing-expanded" : ""}`}
++      onKeyDown={keyboard}
++      tabIndex={0}
++      aria-label="Swing analysis workspace"
++    >
++      <header className="swing-header">
++        <div>
++          <Link
++            href={
++              info.video.isOwner ? "/player/videos" : "/coach/video-reviews"
++            }
++            onClick={(event) => {
++              if (
++                dirty &&
++                !window.confirm("Leave without saving your drawing changes?")
++              )
++                event.preventDefault();
++            }}
++          >
++            ← {info.video.isOwner ? "My swing videos" : "Coach review queue"}
++          </Link>
++          <p className="swing-eyebrow">VECTOR / SWING STUDIO</p>
++          <h1>{info.video.title || `${info.video.club} analysis`}</h1>
++          <p>
++            {info.video.swing_type.replaceAll("_", " ")} /{" "}
++            {info.video.camera_view.replaceAll("_", " ")}
++          </p>
++        </div>
++        <div className="swing-header-actions">
++          <span className="swing-save-status" role="status">
++            {dirty ? "Unsaved changes" : "All changes saved"}
++          </span>
++          <button
++            className="swing-primary"
++            onClick={() => void save()}
++            disabled={saving || readOnly || !dirty}
++          >
++            {saving ? "Saving…" : "Save drawings"}
++          </button>
++        </div>
++      </header>
++      <div className="swing-workbench">
++        <section
++          className="swing-player"
++          aria-label="Video and playback controls"
++        >
++          <div className="swing-canvas-area">
++            <div
++              className="swing-stage"
++              style={{
++                aspectRatio: aspect,
++                width: `min(100%, ${60 * aspect}vh)`,
++              }}
++            >
++              <video
++                ref={video}
++                playsInline
++                muted
++                preload="metadata"
++                disablePictureInPicture
++                onTimeUpdate={() => {
++                  if (video.current) setTime(video.current.currentTime);
++                }}
++                onPlay={() => setPlaying(true)}
++                onPause={() => setPlaying(false)}
++                onEnded={() => {
++                  setPlaying(false);
++                  if (loop && loopStart !== null) {
++                    seek(loopStart);
++                    void togglePlay();
++                  }
++                }}
++                onError={() => {
++                  if (playback)
++                    setPlaybackError(
++                      "The stream could not be played. Refresh playback or check the Mux signing key.",
++                    );
++                }}
++              />
++              {mediaReady && (
++                <DrawingOverlay
++                  key={`${tool}-${layer}-${scope}-${playing}-${showDrawing}-${Math.round(time * fps)}`}
++                  shapes={visible}
++                  tool={tool}
++                  color={color}
++                  width={width}
++                  time={time}
++                  scope={scope}
++                  aspect={aspect}
++                  readOnly={readOnly || !showDrawing || playing}
++                  selected={selected}
++                  onSelect={setSelected}
++                  onAdd={add}
++                  onMove={(shape) =>
++                    edit({
++                      ...doc,
++                      shapes: doc.shapes.map((s) =>
++                        s.id === shape.id ? shape : s,
++                      ),
++                    })
++                  }
++                  onPause={pause}
++                />
++              )}
++              {!mediaReady && (
++                <div className="swing-loading">
++                  <span className="swing-monogram">V</span>
++                  <p>
++                    {info.video.status !== "ready"
++                      ? "This video is still processing."
++                      : playbackError
++                        ? "Playback needs attention"
++                        : "Loading secure video…"}
++                  </p>
++                </div>
++              )}
++            </div>
++          </div>
++          {playbackError && (
++            <div className="swing-media-error" role="alert">
++              {playbackError}
++            </div>
++          )}
++          <div className="swing-playback-toolbar">
++            <span className="swing-clock">
++              {formatTime(time)} <span>/ {formatTime(duration)}</span>
++            </span>
++            <button
++              onClick={() => void refreshPlayback()}
++              disabled={requestingPlayback}
++            >
++              {requestingPlayback ? "Connecting…" : "Refresh playback"}
++            </button>
++            <button onClick={() => setExpanded(!expanded)}>
++              {expanded ? "Exit expanded view" : "Expand workspace"}
++            </button>
++          </div>
++          <div className="swing-timeline">
++            <label htmlFor="swing-timeline">Full video</label>
++            <input
++              id="swing-timeline"
++              aria-label="Full video scrubber"
++              type="range"
++              min="0"
++              max={duration || 1}
++              step="0.001"
++              value={time}
++              disabled={!mediaReady}
++              onChange={(event) => seek(Number(event.target.value), true)}
++            />
++            <div className="swing-transport">
++              <button
++                disabled={!mediaReady}
++                onClick={() => seek(0, true)}
++                aria-label="Return to start"
++              >
++                ↤ Start
++              </button>
++              <button
++                disabled={!mediaReady}
++                onClick={() =>
++                  seek(
++                    stepTime(
++                      video.current?.currentTime ?? time,
++                      -1,
++                      fps,
++                      duration,
++                    ),
++                  )
++                }
++                aria-label="Previous frame"
++              >
++                ‹ Frame
++              </button>
++              <button
++                className="swing-play"
++                disabled={!mediaReady}
++                onClick={() => void togglePlay()}
++              >
++                {playing ? "Pause" : "Play"}
++              </button>
++              <button
++                disabled={!mediaReady}
++                onClick={() =>
++                  seek(
++                    stepTime(
++                      video.current?.currentTime ?? time,
++                      1,
++                      fps,
++                      duration,
++                    ),
++                  )
++                }
++                aria-label="Next frame"
++              >
++                Frame ›
++              </button>
++              <label>
++                Speed
++                <select
++                  aria-label="Playback speed"
++                  value={rate}
++                  onChange={(event) => setSpeed(Number(event.target.value))}
++                >
++                  {[0.1, 0.25, 0.5, 1].map((s) => (
++                    <option key={s} value={s}>
++                      {s}×
++                    </option>
++                  ))}
++                </select>
++              </label>
++            </div>
++            <div className="swing-fine-heading">
++              <label htmlFor="swing-fine">
++                Fine scrub · {formatTime(fineMin)}–{formatTime(fineMax)}
++              </label>
++              <button
++                disabled={!mediaReady}
++                onClick={() => setFineAnchor(time)}
++              >
++                Centre here
++              </button>
++            </div>
++            <input
++              id="swing-fine"
++              aria-label="Fine video scrubber"
++              type="range"
++              min={fineMin}
++              max={fineMax || 1}
++              step="0.001"
++              value={clamp(time, fineMin, fineMax)}
++              disabled={!mediaReady}
++              onChange={(event) => seek(Number(event.target.value))}
++            />
++            <div className="swing-loop">
++              <button
++                disabled={!mediaReady}
++                onClick={() => {
++                  setLoopStart(time);
++                  setLoop(false);
++                }}
++              >
++                Set loop start
++              </button>
++              <button
++                disabled={!mediaReady}
++                onClick={() => {
++                  setLoopEnd(time);
++                  setLoop(false);
++                }}
++              >
++                Set loop end
++              </button>
++              <label>
++                <input
++                  type="checkbox"
++                  checked={loop}
++                  disabled={
++                    loopStart === null ||
++                    loopEnd === null ||
++                    loopEnd <= loopStart
++                  }
++                  onChange={(event) => setLoop(event.target.checked)}
++                />{" "}
++                Loop
++              </label>
++              <span>
++                {loopStart === null ? "—" : formatTime(loopStart)} →{" "}
++                {loopEnd === null ? "—" : formatTime(loopEnd)}
++              </span>
++            </div>
++            <details className="swing-precision">
++              <summary>Frame stepping & keyboard shortcuts</summary>
++              <label>
++                Step rate (frames per second)
++                <input
++                  aria-label="Frame step rate"
++                  type="number"
++                  min="1"
++                  max="240"
++                  step="0.001"
++                  value={fps}
++                  onChange={(event) => {
++                    setFps(clamp(Number(event.target.value) || 30, 1, 240));
++                    setFpsSource("manual");
++                  }}
++                />
++              </label>
++              <p>
++                {fps.toFixed(3).replace(/\.?0+$/, "")} fps · {fpsSource}.
++                Time-based frame steps are approximate on streamed or
++                variable-frame-rate footage. Slow playback does not restore
++                frames absent from the delivered video.
++              </p>
++              <p>
++                Focus this workspace: Space to play/pause; ←/→ to step;
++                Shift+←/→ for 10 steps; Delete to remove a selected drawing;
++                Cmd/Ctrl+Z to undo; Escape to exit expanded view.
++              </p>
++            </details>
++          </div>
++        </section>
++        <aside className="swing-inspector" aria-label="Drawing tools and notes">
++          <div className="swing-panel-title">
++            <h2>Drawing desk</h2>
++            <span>7I.2</span>
++          </div>
++          <label className="swing-field">
++            Layer
++            <select
++              value={layer}
++              onChange={(event) => {
++                setLayer(event.target.value);
++                setTool("select");
++                setSelected(null);
++              }}
++            >
++              <option value="mine">My drawings & notes</option>
++              {info.annotations
++                .filter((s) => s.author_id !== info.userId)
++                .map((s, i) => (
++                  <option key={s.author_id} value={s.author_id}>
++                    Shared layer {i + 1} · read-only
++                  </option>
++                ))}
++            </select>
++          </label>
++          <label className="swing-checkbox">
++            <input
++              type="checkbox"
++              checked={showDrawing}
++              onChange={(event) => setShowDrawing(event.target.checked)}
++            />{" "}
++            Show drawings
++          </label>
++          <div className="swing-tools" role="group" aria-label="Drawing tools">
++            {(["select", ...DRAWING_TOOLS] as const).map((name) => (
++              <button
++                key={name}
++                aria-pressed={tool === name}
++                disabled={readOnly || !mediaReady}
++                onClick={() => {
++                  pause();
++                  setTool(name);
++                  setSelected(null);
++                  setShowDrawing(true);
++                }}
++              >
++                <span aria-hidden="true">
++                  {
++                    {
++                      select: "↖",
++                      line: "╱",
++                      arrow: "↗",
++                      circle: "○",
++                      angle: "∠",
++                    }[name]
++                  }
++                </span>
++                {name === "select" ? "Select / move" : name}
++              </button>
++            ))}
++          </div>
++          <p className="swing-hint">
++            {readOnly
++              ? "This shared layer is read-only. Choose My drawings to add your own."
++              : tool === "angle"
++                ? "Tap three points: start, vertex, end. Escape cancels."
++                : tool === "select"
++                  ? "Select a drawing to move or delete it."
++                  : `Drag across the video to draw a ${tool}.`}
++          </p>
++          <div
++            className="swing-colors"
++            role="group"
++            aria-label="Drawing colour"
++          >
++            {DRAWING_COLORS.map((v, i) => (
++              <button
++                key={v}
++                style={{ backgroundColor: v }}
++                aria-label={["Gold", "Coral", "Mint", "White"][i]}
++                aria-pressed={color === v}
++                disabled={readOnly}
++                onClick={() => setColor(v)}
++              />
++            ))}
++            <select
++              aria-label="Line thickness"
++              value={width}
++              onChange={(event) => setWidth(Number(event.target.value))}
++              disabled={readOnly}
++            >
++              <option value="2">Fine</option>
++              <option value="3">Medium</option>
++              <option value="5">Bold</option>
++            </select>
++          </div>
++          <label className="swing-field">
++            New drawings appear
++            <select
++              value={scope}
++              disabled={readOnly}
++              onChange={(event) =>
++                setScope(event.target.value as "frame" | "video")
++              }
++            >
++              <option value="frame">At this moment only</option>
++              <option value="video">Throughout the video</option>
++            </select>
++          </label>
++          <div className="swing-edit-actions">
++            <button disabled={readOnly || !past.length} onClick={undo}>
++              Undo
++            </button>
++            <button disabled={readOnly || !future.length} onClick={redo}>
++              Redo
++            </button>
++            <button disabled={readOnly || !selected} onClick={removeSelected}>
++              Delete
++            </button>
++            <button
++              disabled={readOnly || !doc.shapes.length}
++              onClick={() => {
++                if (
++                  window.confirm(
++                    "Clear all drawings in your layer? You can undo this.",
++                  )
++                )
++                  edit({ ...doc, shapes: [] });
++              }}
++            >
++              Clear
++            </button>
++          </div>
++          <div className="swing-moments">
++            <h3>
++              Saved moments <span>{activeDocument.shapes.length}/100</span>
++            </h3>
++            {!activeDocument.shapes.length ? (
++              <p className="swing-hint">
++                Draw at a key moment to bookmark it here.
++              </p>
++            ) : (
++              <ul>
++                {activeDocument.shapes.map((s, i) => (
++                  <li key={s.id}>
++                    <button
++                      aria-pressed={selected === s.id}
++                      onClick={() => {
++                        seek(s.time, true);
++                        setSelected(s.id);
++                        setShowDrawing(true);
++                        setTool("select");
++                      }}
++                    >
++                      <span style={{ color: s.color }} aria-hidden="true">
++                        ●
++                      </span>{" "}
++                      {i + 1}. {s.type}{" "}
++                      <span>
++                        {s.scope === "video" ? "All video" : formatTime(s.time)}
++                      </span>
++                    </button>
++                  </li>
++                ))}
++              </ul>
++            )}
++          </div>
++          {info.video.player_question && (
++            <div className="swing-question">
++              <h3>Player question</h3>
++              <p>{info.video.player_question}</p>
++            </div>
++          )}
++          <label className="swing-field">
++            Analysis notes
++            <textarea
++              rows={5}
++              maxLength={4000}
++              placeholder="What do you see? What should the player work on?"
++              value={activeDocument.note}
++              readOnly={readOnly}
++              onChange={(event) => edit({ ...doc, note: event.target.value })}
++            />
++          </label>
++          <p className="swing-hint">
++            Drawings and notes are shared with the player and authorised linked
++            coaches when saved. They are not private drafts.
++          </p>
++          <div className="swing-save-message" role="status">
++            {saveMessage}
++          </div>
++          <button
++            className="swing-primary"
++            onClick={() => void save()}
++            disabled={saving || readOnly || !dirty}
++          >
++            {saving ? "Saving…" : "Save drawings & notes"}
++          </button>
++        </aside>
++      </div>
++    </main>
++  );
++}
+diff --git a/src/components/video/DrawingOverlay.tsx b/src/components/video/DrawingOverlay.tsx
+new file mode 100644
+index 0000000..7bb4a56
+--- /dev/null
++++ b/src/components/video/DrawingOverlay.tsx
+@@ -0,0 +1,237 @@
++"use client";
++import { useRef, useState, type PointerEvent } from "react";
++import {
++  angleDegrees,
++  clamp,
++  type Drawing,
++  type DrawingTool,
++  type Point,
++} from "@/src/lib/video-analysis";
++type Props = {
++  shapes: Drawing[];
++  tool: DrawingTool | "select";
++  color: string;
++  width: number;
++  time: number;
++  scope: "frame" | "video";
++  aspect: number;
++  readOnly: boolean;
++  selected: string | null;
++  onSelect: (id: string | null) => void;
++  onAdd: (shape: Drawing) => void;
++  onMove: (shape: Drawing) => void;
++  onPause: () => void;
++};
++export function DrawingOverlay(props: Props) {
++  const { shapes, tool, aspect, selected, readOnly } = props;
++  const [draft, setDraft] = useState<Point[]>([]);
++  const [moving, setMoving] = useState<Drawing | null>(null);
++  const gesture = useRef<{ start: Point; shape?: Drawing } | null>(null);
++  const height = 1000 / aspect;
++  function point(event: PointerEvent<SVGSVGElement>): Point {
++    const r = event.currentTarget.getBoundingClientRect();
++    return {
++      x: clamp((event.clientX - r.left) / r.width, 0, 1),
++      y: clamp((event.clientY - r.top) / r.height, 0, 1),
++    };
++  }
++  function add(points: Point[]) {
++    props.onAdd({
++      id: crypto.randomUUID(),
++      type: tool as DrawingTool,
++      points,
++      time: props.time,
++      color: props.color,
++      width: props.width,
++      scope: props.scope,
++    });
++    setDraft([]);
++  }
++  function down(event: PointerEvent<SVGSVGElement>) {
++    if (readOnly || !event.isPrimary || event.button !== 0) return;
++    event.currentTarget
++      .closest<HTMLElement>(".swing-studio")
++      ?.focus({ preventScroll: true });
++    props.onPause();
++    const p = point(event);
++    if (tool === "angle") {
++      const points = [...draft, p];
++      if (points.length === 3) add(points);
++      else setDraft(points);
++      return;
++    }
++    event.currentTarget.setPointerCapture(event.pointerId);
++    if (tool === "select") {
++      const id =
++        (event.target as Element)
++          .closest("[data-shape]")
++          ?.getAttribute("data-shape") ?? null;
++      props.onSelect(id);
++      const shape = shapes.find((s) => s.id === id);
++      if (shape) {
++        gesture.current = { start: p, shape };
++        setMoving(shape);
++      }
++    } else {
++      gesture.current = { start: p };
++      setDraft([p, p]);
++    }
++  }
++  function translated(shape: Drawing, start: Point, end: Point): Drawing {
++    const dx = clamp(
++      end.x - start.x,
++      -Math.min(...shape.points.map((a) => a.x)),
++      1 - Math.max(...shape.points.map((a) => a.x)),
++    );
++    const dy = clamp(
++      end.y - start.y,
++      -Math.min(...shape.points.map((a) => a.y)),
++      1 - Math.max(...shape.points.map((a) => a.y)),
++    );
++    return {
++      ...shape,
++      points: shape.points.map((a) => ({ x: a.x + dx, y: a.y + dy })),
++    };
++  }
++  function move(event: PointerEvent<SVGSVGElement>) {
++    const active = gesture.current;
++    if (!active || readOnly) return;
++    const p = point(event);
++    if (active.shape) setMoving(translated(active.shape, active.start, p));
++    else setDraft([active.start, p]);
++  }
++  function up(event: PointerEvent<SVGSVGElement>) {
++    const active = gesture.current;
++    if (!active) return;
++    const p = point(event);
++    if (active.shape) {
++      if (Math.hypot(p.x - active.start.x, p.y - active.start.y) > 0.001)
++        props.onMove(translated(active.shape, active.start, p));
++    } else if (
++      tool !== "select" &&
++      Math.hypot(p.x - active.start.x, p.y - active.start.y) > 0.004
++    )
++      add([active.start, p]);
++    gesture.current = null;
++    setMoving(null);
++    setDraft([]);
++    if (event.currentTarget.hasPointerCapture(event.pointerId))
++      event.currentTarget.releasePointerCapture(event.pointerId);
++  }
++  function renderShape(shape: Drawing, preview = false) {
++    const pts = shape.points.map((p) => ({ x: p.x * 1000, y: p.y * height }));
++    const [a, b, c] = pts;
++    if (!a) return null;
++    const degrees =
++      shape.type === "angle" ? angleDegrees(shape.points, aspect) : null;
++    const rotation = b ? Math.atan2(b.y - a.y, b.x - a.x) : 0;
++    const arrow = b
++      ? `${b.x - 16 * Math.cos(rotation - 0.45)},${b.y - 16 * Math.sin(rotation - 0.45)} ${b.x},${b.y} ${b.x - 16 * Math.cos(rotation + 0.45)},${b.y - 16 * Math.sin(rotation + 0.45)}`
++      : "";
++    return (
++      <g
++        key={shape.id}
++        data-shape={preview ? undefined : shape.id}
++        stroke={shape.color}
++        strokeWidth={shape.width * 1.5}
++        fill="none"
++        strokeLinecap="round"
++        strokeLinejoin="round"
++        opacity={preview ? 0.8 : 1}
++      >
++        {shape.type === "circle" && b ? (
++          <ellipse
++            cx={(a.x + b.x) / 2}
++            cy={(a.y + b.y) / 2}
++            rx={Math.abs(a.x - b.x) / 2}
++            ry={Math.abs(a.y - b.y) / 2}
++          />
++        ) : b ? (
++          <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} />
++        ) : null}
++        {shape.type === "arrow" && b && <polyline points={arrow} />}
++        {shape.type === "angle" && b && c && (
++          <>
++            <line x1={b.x} y1={b.y} x2={c.x} y2={c.y} />
++            <text
++              x={clamp(b.x + 14, 30, 880)}
++              y={clamp(b.y - 14, 28, height - 10)}
++              fontSize="26"
++              fontWeight="700"
++              fill={shape.color}
++              stroke="#102a24"
++              strokeWidth="4"
++              paintOrder="stroke"
++            >
++              {degrees === null ? "—" : `${degrees.toFixed(1)}°`}
++            </text>
++          </>
++        )}
++        {(selected === shape.id || preview) &&
++          pts.map((p, i) => (
++            <circle
++              key={i}
++              cx={p.x}
++              cy={p.y}
++              r="7"
++              fill={shape.color}
++              stroke="#102a24"
++              strokeWidth="2"
++            />
++          ))}
++        {!preview &&
++          tool === "select" &&
++          !readOnly &&
++          b &&
++          (shape.type === "circle" ? (
++            <ellipse
++              cx={(a.x + b.x) / 2}
++              cy={(a.y + b.y) / 2}
++              rx={Math.abs(a.x - b.x) / 2}
++              ry={Math.abs(a.y - b.y) / 2}
++              stroke="transparent"
++              strokeWidth="24"
++            />
++          ) : (
++            <polyline
++              points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
++              stroke="transparent"
++              strokeWidth="24"
++            />
++          ))}
++      </g>
++    );
++  }
++  return (
++    <svg
++      className={`swing-overlay ${tool === "select" ? "is-select" : ""}`}
++      viewBox={`0 0 1000 ${height}`}
++      role="img"
++      aria-label="Video drawing canvas. Drag to draw; angle tool uses three taps: start, vertex, end."
++      onPointerDown={down}
++      onPointerMove={move}
++      onPointerUp={up}
++      onPointerCancel={() => {
++        gesture.current = null;
++        setMoving(null);
++        setDraft([]);
++      }}
++    >
++      {shapes.map((s) => renderShape(moving?.id === s.id ? moving : s))}
++      {!!draft.length &&
++        tool !== "select" &&
++        renderShape(
++          {
++            id: "draft",
++            type: tool,
++            points: draft,
++            color: props.color,
++            width: props.width,
++            time: props.time,
++            scope: props.scope,
++          },
++          true,
++        )}
++    </svg>
++  );
++}
+diff --git a/src/lib/video-access.ts b/src/lib/video-access.ts
+new file mode 100644
+index 0000000..3768c80
+--- /dev/null
++++ b/src/lib/video-access.ts
+@@ -0,0 +1,97 @@
++import "server-only";
++import { NextResponse } from "next/server";
++import { createClient } from "@supabase/supabase-js";
++import { createAdminClient } from "./supabase/admin";
++import { canAccessVideo, isUUID } from "./video-analysis";
++
++export class VideoApiError extends Error {
++  constructor(
++    public status: number,
++    message: string,
++  ) {
++    super(message);
++  }
++}
++export function privateJson(body: unknown, status = 200) {
++  return NextResponse.json(body, {
++    status,
++    headers: {
++      "Cache-Control": "private, no-store, max-age=0",
++      Vary: "Authorization",
++    },
++  });
++}
++export async function videoApi(action: () => Promise<Response>) {
++  try {
++    return await action();
++  } catch (error) {
++    if (error instanceof VideoApiError)
++      return privateJson({ error: error.message }, error.status);
++    // Do not log credentials, signed URLs, request bodies or complete database records.
++    console.error(
++      "Video analysis request failed",
++      error instanceof Error ? error.name : "UnknownError",
++    );
++    return privateJson(
++      {
++        error:
++          "Video analysis is unavailable. Check the server configuration and try again.",
++      },
++      500,
++    );
++  }
++}
++export async function requireVideoAccess(request: Request, videoId: string) {
++  const authorization = request.headers.get("authorization");
++  if (!authorization?.startsWith("Bearer "))
++    throw new VideoApiError(401, "Please sign in to open this video.");
++  if (!isUUID(videoId)) throw new VideoApiError(404, "Video not found.");
++  const url = process.env.NEXT_PUBLIC_SUPABASE_URL,
++    key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
++  if (!url || !key)
++    throw new VideoApiError(503, "Video authentication is not configured.");
++  const auth = createClient(url, key, {
++    auth: { persistSession: false, autoRefreshToken: false },
++  });
++  const {
++    data: { user },
++    error,
++  } = await auth.auth.getUser(authorization.slice(7));
++  if (error || !user)
++    throw new VideoApiError(
++      401,
++      "Your session has expired. Please sign in again.",
++    );
++  const admin = createAdminClient();
++  const { data: video, error: videoError } = await admin
++    .from("swing_videos")
++    .select(
++      "id,player_id,title,club,camera_view,swing_type,status,player_question,mux_asset_id,mux_playback_id,duration_seconds,aspect_ratio",
++    )
++    .eq("id", videoId)
++    .maybeSingle();
++  if (videoError)
++    throw new VideoApiError(503, "The video database is unavailable.");
++  if (!video || video.status === "archived")
++    throw new VideoApiError(404, "Video not found.");
++  let role = "player",
++    linked = false;
++  if (video.player_id !== user.id) {
++    const [profile, link] = await Promise.all([
++      admin.from("profiles").select("role").eq("id", user.id).maybeSingle(),
++      admin
++        .from("coach_player_links")
++        .select("coach_id")
++        .eq("coach_id", user.id)
++        .eq("player_id", video.player_id)
++        .maybeSingle(),
++    ]);
++    if (profile.error || link.error)
++      throw new VideoApiError(503, "Video access could not be checked.");
++    role = profile.data?.role ?? "player";
++    linked = !!link.data;
++  }
++  if (!canAccessVideo(user.id, video.player_id, role, linked))
++    throw new VideoApiError(404, "Video not found.");
++  return { admin, user, video };
++}
+diff --git a/src/lib/video-analysis.ts b/src/lib/video-analysis.ts
+new file mode 100644
+index 0000000..09dec40
+--- /dev/null
++++ b/src/lib/video-analysis.ts
+@@ -0,0 +1,132 @@
++// Shared, dependency-free validation and geometry for the 7I.2 editor.
++export const DRAWING_COLORS = [
++  "#f4c95d",
++  "#ff5f57",
++  "#5ed6b5",
++  "#ffffff",
++] as const;
++export const DRAWING_TOOLS = ["line", "arrow", "circle", "angle"] as const;
++export type DrawingTool = (typeof DRAWING_TOOLS)[number];
++export type Point = { x: number; y: number };
++export type Drawing = {
++  id: string;
++  type: DrawingTool;
++  points: Point[];
++  color: string;
++  width: number;
++  time: number;
++  scope: "frame" | "video";
++};
++export type AnalysisDocument = { version: 1; shapes: Drawing[]; note: string };
++export type AnnotationSet = {
++  author_id: string;
++  revision: number;
++  document: AnalysisDocument;
++  updated_at: string;
++};
++export const emptyDocument = (): AnalysisDocument => ({
++  version: 1,
++  shapes: [],
++  note: "",
++});
++export const isUUID = (value: string) =>
++  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
++export const clamp = (value: number, min: number, max: number) =>
++  Math.min(max, Math.max(min, value));
++export function canAccessVideo(
++  userId: string,
++  playerId: string,
++  role: string,
++  linked: boolean,
++) {
++  return (
++    userId === playerId || (linked && (role === "coach" || role === "admin"))
++  );
++}
++export function validateDocument(
++  value: unknown,
++  duration: number,
++): value is AnalysisDocument {
++  if (!value || typeof value !== "object") return false;
++  const doc = value as AnalysisDocument;
++  if (
++    doc.version !== 1 ||
++    typeof doc.note !== "string" ||
++    doc.note.length > 4000 ||
++    !Array.isArray(doc.shapes) ||
++    doc.shapes.length > 100
++  )
++    return false;
++  const ids = new Set<string>();
++  for (const s of doc.shapes) {
++    if (
++      !s ||
++      typeof s !== "object" ||
++      typeof s.id !== "string" ||
++      !isUUID(s.id) ||
++      ids.has(s.id)
++    )
++      return false;
++    ids.add(s.id);
++    if (
++      !DRAWING_TOOLS.includes(s.type) ||
++      !DRAWING_COLORS.includes(s.color as (typeof DRAWING_COLORS)[number]) ||
++      ![2, 3, 5].includes(s.width) ||
++      !["frame", "video"].includes(s.scope) ||
++      !Number.isFinite(s.time) ||
++      s.time < 0 ||
++      s.time > duration + 0.1 ||
++      !Array.isArray(s.points) ||
++      s.points.length !== (s.type === "angle" ? 3 : 2)
++    )
++      return false;
++    if (
++      !s.points.every(
++        (p) =>
++          p &&
++          Number.isFinite(p.x) &&
++          Number.isFinite(p.y) &&
++          p.x >= 0 &&
++          p.x <= 1 &&
++          p.y >= 0 &&
++          p.y <= 1,
++      )
++    )
++      return false;
++  }
++  return true;
++}
++export function angleDegrees(points: Point[], aspect: number) {
++  if (points.length !== 3) return null;
++  const [a, b, c] = points;
++  const u = { x: (a.x - b.x) * aspect, y: a.y - b.y },
++    v = { x: (c.x - b.x) * aspect, y: c.y - b.y };
++  const length = Math.hypot(u.x, u.y) * Math.hypot(v.x, v.y);
++  return length < 0.000001
++    ? null
++    : (Math.acos(clamp((u.x * v.x + u.y * v.y) / length, -1, 1)) * 180) /
++        Math.PI;
++}
++export function stepTime(
++  time: number,
++  direction: number,
++  fps: number,
++  duration: number,
++) {
++  return clamp(
++    time + direction / (Number.isFinite(fps) && fps > 0 ? fps : 30),
++    0,
++    duration,
++  );
++}
++export function drawingVisible(shape: Drawing, time: number, fps: number) {
++  return (
++    shape.scope === "video" ||
++    Math.abs(shape.time - time) <= 0.55 / Math.max(1, fps)
++  );
++}
++export function formatTime(value: number) {
++  if (!Number.isFinite(value)) return "0:00.000";
++  const ms = Math.round(Math.max(0, value) * 1000);
++  return `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}.${String(ms % 1000).padStart(3, "0")}`;
++}
+diff --git a/src/styles/package-7i2.css b/src/styles/package-7i2.css
+new file mode 100644
+index 0000000..0f2bc3d
+--- /dev/null
++++ b/src/styles/package-7i2.css
+@@ -0,0 +1,553 @@
++.swing-studio {
++  --forest: #143c2a;
++  --gold: #e4bb59;
++  --ink: #17322a;
++  --muted: #596c63;
++  color: var(--ink);
++  background: #f4f2ea;
++  max-width: 1500px;
++  margin: 0 auto;
++  padding: 30px clamp(12px, 3vw, 42px) 50px;
++  font-family: Arial, sans-serif;
++  box-sizing: border-box;
++  outline: none;
++}
++.swing-studio * {
++  box-sizing: border-box;
++}
++.swing-studio h1 {
++  font-family: Georgia, serif;
++  font-size: clamp(28px, 3vw, 42px);
++  font-weight: 500;
++  line-height: 1.15;
++  margin: 8px 0;
++}
++.swing-studio h2 {
++  font-size: 19px;
++  font-weight: 600;
++  margin: 0;
++}
++.swing-studio h3 {
++  font-size: 13px;
++  font-weight: 700;
++  margin: 0 0 8px;
++}
++.swing-studio p {
++  margin: 8px 0;
++  line-height: 1.5;
++}
++.swing-studio a {
++  color: var(--forest);
++  font-size: 13px;
++  text-decoration: underline;
++  text-underline-offset: 3px;
++}
++.swing-eyebrow {
++  font-size: 11px;
++  letter-spacing: 2px;
++  font-weight: 700;
++  margin-top: 24px !important;
++  color: var(--muted);
++}
++.swing-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 20px;
++  margin-bottom: 26px;
++}
++.swing-header > div > p:last-child {
++  font-size: 14px;
++  color: var(--muted);
++  text-transform: capitalize;
++}
++.swing-header-actions {
++  display: flex;
++  align-items: center;
++  gap: 18px;
++}
++.swing-save-status {
++  font-size: 12px;
++  color: var(--muted);
++}
++.swing-workbench {
++  display: grid;
++  grid-template-columns: minmax(0, 1fr) 310px;
++  gap: 20px;
++  align-items: start;
++}
++.swing-player {
++  min-width: 0;
++  background: white;
++  border: 1px solid #dce2d8;
++  border-radius: 16px;
++  overflow: hidden;
++}
++.swing-inspector {
++  background: #fff;
++  border: 1px solid #dce2d8;
++  border-radius: 16px;
++  padding: 22px;
++  min-width: 0;
++}
++.swing-panel-title {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  border-bottom: 1px solid #e1e5df;
++  padding-bottom: 18px;
++  margin-bottom: 18px;
++}
++.swing-panel-title span {
++  font-size: 11px;
++  letter-spacing: 1px;
++  color: var(--muted);
++}
++.swing-studio button {
++  font: inherit;
++  font-size: 12px;
++  line-height: 1.25;
++  border: 1px solid #d2dcd4;
++  background: #fff;
++  color: var(--ink);
++  border-radius: 7px;
++  padding: 10px 12px;
++  cursor: pointer;
++  min-height: 40px;
++}
++.swing-studio button:hover:not(:disabled) {
++  background: #eaf0e8;
++}
++.swing-studio button:disabled {
++  opacity: 0.45;
++  cursor: default;
++}
++.swing-studio button:focus-visible,
++.swing-studio input:focus-visible,
++.swing-studio select:focus-visible,
++.swing-studio textarea:focus-visible,
++.swing-studio a:focus-visible,
++.swing-studio summary:focus-visible {
++  outline: 3px solid #dca82b;
++  outline-offset: 3px;
++}
++.swing-studio .swing-primary,
++.swing-studio .swing-play {
++  background: var(--forest);
++  border-color: var(--forest);
++  color: white;
++  font-weight: 700;
++}
++.swing-studio .swing-primary:hover:not(:disabled),
++.swing-studio .swing-play:hover:not(:disabled) {
++  background: #24563c;
++}
++.swing-studio .swing-primary {
++  padding: 13px 18px;
++}
++.swing-inspector > .swing-primary {
++  width: 100%;
++  margin-top: 12px;
++}
++.swing-canvas-area {
++  background: #10221c;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  min-height: 180px;
++  padding: 16px;
++}
++.swing-stage {
++  position: relative;
++  max-width: 100%;
++  max-height: 60vh;
++  background: #091510;
++  overflow: hidden;
++}
++.swing-stage video {
++  display: block;
++  width: 100%;
++  height: 100%;
++  object-fit: contain;
++}
++.swing-overlay {
++  position: absolute;
++  inset: 0;
++  width: 100%;
++  height: 100%;
++  touch-action: none;
++  cursor: crosshair;
++}
++.swing-overlay.is-select {
++  cursor: default;
++}
++.swing-loading {
++  position: absolute;
++  inset: 0;
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  justify-content: center;
++  color: #d8e2d5;
++  text-align: center;
++  font-size: 13px;
++}
++.swing-monogram {
++  font-family: Georgia, serif;
++  color: var(--gold);
++  font-style: italic;
++  font-size: 60px;
++}
++.swing-media-error {
++  background: #fff1e8;
++  padding: 14px 20px;
++  color: #8b311f;
++  font-size: 13px;
++  line-height: 1.5;
++}
++.swing-playback-toolbar {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  flex-wrap: wrap;
++  padding: 14px 18px;
++  border-bottom: 1px solid #e3e8e0;
++}
++.swing-clock {
++  font:
++    14px ui-monospace,
++    monospace;
++  margin-right: auto;
++  font-variant-numeric: tabular-nums;
++}
++.swing-clock span {
++  color: var(--muted);
++}
++.swing-playback-toolbar button {
++  font-size: 11px;
++  padding: 8px 10px;
++}
++.swing-timeline {
++  padding: 20px;
++}
++.swing-timeline > label,
++.swing-fine-heading label {
++  font-size: 12px;
++  font-weight: 700;
++}
++.swing-studio input[type="range"] {
++  width: 100%;
++  height: 32px;
++  margin: 8px 0 14px;
++  accent-color: var(--forest);
++  cursor: ew-resize;
++}
++.swing-transport {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  flex-wrap: wrap;
++  margin-bottom: 24px;
++}
++.swing-transport label {
++  display: flex;
++  gap: 7px;
++  align-items: center;
++  font-size: 12px;
++  margin-left: auto;
++}
++.swing-transport .swing-play {
++  min-width: 76px;
++}
++.swing-fine-heading {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  gap: 8px;
++}
++.swing-fine-heading button {
++  font-size: 11px;
++}
++.swing-loop {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  flex-wrap: wrap;
++}
++.swing-loop label,
++.swing-loop span {
++  font-size: 12px;
++}
++.swing-loop span {
++  color: var(--muted);
++}
++.swing-loop input,
++.swing-checkbox input {
++  accent-color: var(--forest);
++}
++.swing-studio select,
++.swing-studio textarea,
++.swing-studio input[type="number"] {
++  background: #f8faf6;
++  border: 1px solid #d7e0d5;
++  border-radius: 6px;
++  color: var(--ink);
++  padding: 9px;
++  font: inherit;
++  font-size: 13px;
++  min-height: 40px;
++  max-width: 100%;
++}
++.swing-studio textarea {
++  resize: vertical;
++  width: 100%;
++  line-height: 1.5;
++}
++.swing-field {
++  display: flex;
++  flex-direction: column;
++  gap: 7px;
++  font-size: 12px;
++  font-weight: 700;
++  margin-bottom: 16px;
++}
++.swing-checkbox {
++  display: flex;
++  gap: 8px;
++  align-items: center;
++  font-size: 12px;
++  margin-bottom: 14px;
++}
++.swing-tools {
++  display: grid;
++  grid-template-columns: repeat(3, minmax(0, 1fr));
++  gap: 6px;
++}
++.swing-tools button {
++  text-transform: capitalize;
++  display: flex;
++  flex-direction: column;
++  gap: 5px;
++  align-items: center;
++  padding: 10px 4px;
++  min-height: 65px;
++  font-size: 11px;
++}
++.swing-tools button span {
++  font-size: 21px;
++}
++.swing-tools button[aria-pressed="true"] {
++  background: var(--forest);
++  color: white;
++  border-color: var(--forest);
++}
++.swing-hint {
++  color: var(--muted);
++  font-size: 11px !important;
++  line-height: 1.6 !important;
++  margin: 12px 0 !important;
++}
++.swing-colors {
++  display: flex;
++  gap: 10px;
++  align-items: center;
++  margin: 16px 0;
++}
++.swing-colors button {
++  width: 28px;
++  height: 28px;
++  min-height: 28px;
++  padding: 0;
++  border-radius: 50%;
++  border: 1px solid #bac8bc;
++  flex-shrink: 0;
++}
++.swing-colors button[aria-pressed="true"] {
++  outline: 2px solid var(--forest);
++  outline-offset: 3px;
++}
++.swing-colors select {
++  margin-left: auto;
++  min-width: 0;
++  padding: 7px;
++  font-size: 11px;
++}
++.swing-edit-actions {
++  display: grid;
++  grid-template-columns: repeat(4, minmax(0, 1fr));
++  gap: 5px;
++  margin-bottom: 20px;
++}
++.swing-edit-actions button {
++  padding: 8px 4px;
++  font-size: 11px;
++}
++.swing-moments {
++  border-top: 1px solid #e3e8e0;
++  padding-top: 18px;
++  margin-bottom: 18px;
++}
++.swing-moments h3 {
++  display: flex;
++  justify-content: space-between;
++}
++.swing-moments h3 span {
++  font-weight: 400;
++  color: var(--muted);
++}
++.swing-moments ul {
++  list-style: none;
++  margin: 8px 0;
++  padding: 0;
++  max-height: 190px;
++  overflow: auto;
++}
++.swing-moments li {
++  margin: 5px 0;
++}
++.swing-moments button {
++  display: flex;
++  gap: 7px;
++  align-items: center;
++  width: 100%;
++  text-align: left;
++  background: #f7f9f4;
++}
++.swing-moments button span:last-child {
++  margin-left: auto;
++  font:
++    10px ui-monospace,
++    monospace;
++}
++.swing-moments button[aria-pressed="true"] {
++  border-color: var(--forest);
++}
++.swing-question {
++  padding: 14px;
++  background: #f1f4e9;
++  border-radius: 8px;
++  margin-bottom: 18px;
++}
++.swing-question p {
++  font-size: 12px;
++  overflow-wrap: anywhere;
++}
++.swing-save-message {
++  font-size: 12px;
++  line-height: 1.5;
++  overflow-wrap: anywhere;
++}
++.swing-precision {
++  margin-top: 20px;
++  border-top: 1px solid #e3e8e0;
++  padding-top: 14px;
++  color: var(--muted);
++  font-size: 11px;
++}
++.swing-precision summary {
++  cursor: pointer;
++  font-weight: 700;
++}
++.swing-precision label {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  margin-top: 14px;
++}
++.swing-precision input {
++  width: 95px;
++}
++.swing-notice {
++  padding: 30px;
++  background: white;
++  border-radius: 14px;
++}
++.swing-notice button {
++  margin-left: 20px;
++}
++.swing-expanded {
++  position: fixed;
++  inset: 0;
++  z-index: 1000;
++  max-width: none;
++  overflow: auto;
++}
++@media (max-width: 1100px) {
++  .swing-workbench {
++    grid-template-columns: minmax(0, 1fr) 270px;
++    gap: 12px;
++  }
++  .swing-inspector {
++    padding: 16px;
++  }
++  .swing-header-actions {
++    flex-direction: column;
++    gap: 8px;
++    align-items: flex-end;
++  }
++  .swing-colors {
++    gap: 8px;
++  }
++}
++@media (max-width: 760px) {
++  .swing-studio {
++    padding: 20px 12px 36px;
++  }
++  .swing-header {
++    align-items: flex-start;
++    gap: 10px;
++  }
++  .swing-header-actions > .swing-primary {
++    font-size: 11px;
++    padding: 10px;
++  }
++  .swing-save-status {
++    font-size: 10px;
++  }
++  .swing-workbench {
++    grid-template-columns: 1fr;
++  }
++  .swing-eyebrow {
++    font-size: 9px;
++    letter-spacing: 1.5px;
++  }
++  .swing-timeline {
++    padding: 14px;
++  }
++  .swing-canvas-area {
++    padding: 8px;
++  }
++  .swing-transport {
++    gap: 5px;
++  }
++  .swing-transport button {
++    font-size: 11px;
++    padding: 9px 7px;
++  }
++  .swing-transport label {
++    margin-left: 0;
++  }
++  .swing-inspector {
++    padding: 20px;
++  }
++  .swing-tools {
++    grid-template-columns: repeat(5, minmax(0, 1fr));
++  }
++  .swing-playback-toolbar {
++    padding: 10px;
++  }
++  .swing-header h1 {
++    font-size: 28px;
++  }
++  .swing-stage {
++    max-height: 60vh;
++  }
++  .swing-colors button {
++    width: 34px;
++    height: 34px;
++    min-height: 34px;
++  }
++  .swing-save-message {
++    min-height: 18px;
++  }
++}
+diff --git a/supabase/migrations/202608280001_package_7i_2_video_annotations.sql b/supabase/migrations/202608280001_package_7i_2_video_annotations.sql
+new file mode 100644
+index 0000000..5effbd9
+--- /dev/null
++++ b/supabase/migrations/202608280001_package_7i_2_video_annotations.sql
+@@ -0,0 +1,32 @@
++begin;
++-- Additive: does not recreate or change the working 7I.1 video tables.
++create table if not exists public.swing_video_annotations (
++  video_id uuid not null references public.swing_videos(id) on delete cascade,
++  author_id uuid not null references public.profiles(id) on delete cascade,
++  document jsonb not null default '{"version":1,"shapes":[],"note":""}'::jsonb,
++  revision integer not null default 1 check (revision > 0),
++  updated_at timestamptz not null default now(),
++  primary key (video_id, author_id),
++  check (jsonb_typeof(document) = 'object'),
++  check (octet_length(document::text) <= 100000)
++);
++alter table public.swing_video_annotations enable row level security;
++drop policy if exists "participants read video annotations" on public.swing_video_annotations;
++create policy "participants read video annotations" on public.swing_video_annotations
++for select to authenticated using (
++  exists (
++    select 1 from public.swing_videos sv where sv.id = swing_video_annotations.video_id
++    and sv.status <> 'archived'
++    and (sv.player_id = auth.uid() or exists (
++      select 1 from public.coach_player_links cpl
++      join public.profiles p on p.id = cpl.coach_id
++      where cpl.coach_id = auth.uid() and cpl.player_id = sv.player_id
++        and p.role in ('coach', 'admin')
++    ))
++  )
++);
++-- Writes pass through the authenticated API for validation and revision checks.
++revoke all on public.swing_video_annotations from anon, authenticated;
++grant select on public.swing_video_annotations to authenticated;
++grant all on public.swing_video_annotations to service_role;
++commit;
+diff --git a/tests/video-analysis.test.mjs b/tests/video-analysis.test.mjs
+new file mode 100644
+index 0000000..ffc5775
+--- /dev/null
++++ b/tests/video-analysis.test.mjs
+@@ -0,0 +1,169 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import {
++  canAccessVideo,
++  validateDocument,
++  emptyDocument,
++  angleDegrees,
++  stepTime,
++  drawingVisible,
++  formatTime,
++} from "../src/lib/video-analysis.ts";
++const drawing = () => ({
++  id: "11111111-1111-4111-8111-111111111111",
++  type: "line",
++  points: [
++    { x: 0.1, y: 0.2 },
++    { x: 0.8, y: 0.9 },
++  ],
++  color: "#f4c95d",
++  width: 3,
++  time: 1,
++  scope: "frame",
++});
++test("access requires ownership or a coach/admin relationship", () => {
++  assert.equal(canAccessVideo("a", "a", "player", false), true);
++  assert.equal(canAccessVideo("b", "a", "coach", true), true);
++  assert.equal(canAccessVideo("b", "a", "admin", true), true);
++  for (const role of ["coach", "admin", "player"])
++    assert.equal(canAccessVideo("b", "a", role, false), false);
++  assert.equal(canAccessVideo("b", "a", "player", true), false);
++});
++test("valid normalized documents", () => {
++  assert.equal(validateDocument(emptyDocument(), 10), true);
++  assert.equal(
++    validateDocument({ version: 1, shapes: [drawing()], note: "Posture" }, 10),
++    true,
++  );
++});
++test("reject unsafe geometry, styles, timestamps and duplicate ids", () => {
++  for (const change of [
++    { time: NaN },
++    { time: -1 },
++    { time: 30 },
++    { color: "url(https://example.com)" },
++    { width: 99 },
++    { scope: "public" },
++    { id: "bad" },
++    { type: "script" },
++    {
++      points: [
++        { x: 1.1, y: 0 },
++        { x: 0, y: 0 },
++      ],
++    },
++    {
++      points: [
++        { x: 0, y: Infinity },
++        { x: 0, y: 0 },
++      ],
++    },
++    { points: [] },
++  ])
++    assert.equal(
++      validateDocument(
++        { version: 1, shapes: [{ ...drawing(), ...change }], note: "" },
++        10,
++      ),
++      false,
++    );
++  assert.equal(
++    validateDocument(
++      { version: 1, shapes: [drawing(), drawing()], note: "" },
++      10,
++    ),
++    false,
++  );
++});
++test("bounded documents and three-point angles", () => {
++  assert.equal(
++    validateDocument({ ...emptyDocument(), note: "a".repeat(4001) }, 10),
++    false,
++  );
++  assert.equal(
++    validateDocument(
++      { ...emptyDocument(), shapes: Array(101).fill(drawing()) },
++      10,
++    ),
++    false,
++  );
++  assert.equal(
++    validateDocument(
++      { ...emptyDocument(), shapes: [{ ...drawing(), type: "angle" }] },
++      10,
++    ),
++    false,
++  );
++  assert.equal(
++    validateDocument(
++      {
++        ...emptyDocument(),
++        shapes: [
++          {
++            ...drawing(),
++            type: "angle",
++            points: [
++              { x: 0, y: 0 },
++              { x: 0.5, y: 0.5 },
++              { x: 1, y: 0 },
++            ],
++          },
++        ],
++      },
++      10,
++    ),
++    true,
++  );
++});
++test("angles respect video geometry", () => {
++  assert.equal(
++    angleDegrees(
++      [
++        { x: 0, y: 0 },
++        { x: 0, y: 1 },
++        { x: 1, y: 1 },
++      ],
++      16 / 9,
++    ),
++    90,
++  );
++  assert.ok(
++    Math.abs(
++      angleDegrees(
++        [
++          { x: 1, y: 0 },
++          { x: 0, y: 0 },
++          { x: 1, y: 1 },
++        ],
++        2,
++      ) - 26.565051177,
++    ) < 1e-6,
++  );
++  assert.equal(
++    angleDegrees(
++      [
++        { x: 0, y: 0 },
++        { x: 0, y: 0 },
++        { x: 1, y: 1 },
++      ],
++      9 / 16,
++    ),
++    null,
++  );
++});
++test("frame steps clamp and fall back to 30fps", () => {
++  assert.equal(stepTime(0, -1, 30, 5), 0);
++  assert.equal(stepTime(5, 1, 30, 5), 5);
++  assert.ok(Math.abs(stepTime(1, 1, 60, 5) - 1 - 1 / 60) < 1e-10);
++  assert.equal(stepTime(0, 1, NaN, 5), 1 / 30);
++});
++test("moment and whole-video visibility", () => {
++  assert.equal(drawingVisible(drawing(), 1, 30), true);
++  assert.equal(drawingVisible(drawing(), 2, 30), false);
++  assert.equal(drawingVisible({ ...drawing(), scope: "video" }, 2, 30), true);
++});
++test("millisecond time formatting", () => {
++  assert.equal(formatTime(59.9999), "1:00.000");
++  assert.equal(formatTime(1 / 30), "0:00.033");
++  assert.equal(formatTime(NaN), "0:00.000");
++});
+diff --git a/tests/video-api.test.mjs b/tests/video-api.test.mjs
+new file mode 100644
+index 0000000..e02b590
+--- /dev/null
++++ b/tests/video-api.test.mjs
+@@ -0,0 +1,347 @@
++// Real route/access code with deterministic Supabase and Mux adapters. No live writes.
++import test from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import path from "node:path";
++import vm from "node:vm";
++import ts from "typescript";
++import Mux from "@mux/mux-node";
++import { generateKeyPairSync, verify } from "node:crypto";
++import { createRequire } from "node:module";
++const require = createRequire(import.meta.url),
++  root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
++const id = "11111111-1111-4111-8111-111111111111",
++  owner = "22222222-2222-4222-8222-222222222222",
++  coach = "33333333-3333-4333-8333-333333333333";
++const empty = () => ({ version: 1, shapes: [], note: "" });
++function fixture(options = {}) {
++  const rows = [];
++  let signed = 0;
++  const video = {
++    id,
++    player_id: owner,
++    status: "ready",
++    mux_asset_id: "asset",
++    duration_seconds: 6,
++    club: "7-iron",
++    camera_view: "down_the_line",
++    swing_type: "full_swing",
++    ...options.video,
++  };
++  const admin = {
++    from(table) {
++      let mode = "select",
++        values,
++        filters = [];
++      const query = {
++        select() {
++          return query;
++        },
++        eq(k, v) {
++          filters.push([k, v]);
++          return query;
++        },
++        order() {
++          return query;
++        },
++        insert(v) {
++          mode = "insert";
++          values = v;
++          return query;
++        },
++        update(v) {
++          mode = "update";
++          values = v;
++          return query;
++        },
++        maybeSingle() {
++          return Promise.resolve(result(true));
++        },
++        then(resolve, reject) {
++          return Promise.resolve(result(false)).then(resolve, reject);
++        },
++      };
++      function result(single) {
++        if (table === "swing_videos")
++          return { data: options.missing ? null : video, error: null };
++        if (table === "profiles")
++          return { data: { role: options.role || "player" }, error: null };
++        if (table === "coach_player_links")
++          return {
++            data: options.linked ? { coach_id: coach } : null,
++            error: null,
++          };
++        if (options.dbError) return { data: null, error: { code: "42P01" } };
++        if (mode === "insert") {
++          if (
++            rows.some(
++              (r) =>
++                r.video_id === values.video_id &&
++                r.author_id === values.author_id,
++            )
++          )
++            return { data: null, error: { code: "23505" } };
++          rows.push(values);
++          return { data: values, error: null };
++        }
++        const matches = rows.filter((r) =>
++          filters.every(([k, v]) => r[k] === v),
++        );
++        if (mode === "update") matches.forEach((r) => Object.assign(r, values));
++        return { data: single ? (matches[0] ?? null) : matches, error: null };
++      }
++      return query;
++    },
++  };
++  const environment = {
++    NEXT_PUBLIC_SUPABASE_URL: "https://fixture.invalid",
++    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "fixture",
++    MUX_SIGNING_KEY_ID: "fixture",
++    MUX_SIGNING_PRIVATE_KEY: "fixture",
++    ...options.env,
++  };
++  const mux = {
++    video: {
++      assets: {
++        retrieve: async () => ({
++          status: "ready",
++          passthrough: id,
++          playback_ids: [{ id: "signed-id", policy: "signed" }],
++          max_stored_frame_rate: 30,
++          duration: 6,
++          ...options.asset,
++        }),
++      },
++    },
++    jwt: {
++      signPlaybackId: async () => {
++        signed++;
++        return "fixture-token";
++      },
++    },
++  };
++  const cache = new Map();
++  function load(file) {
++    if (cache.has(file)) return cache.get(file).exports;
++    const module = { exports: {} };
++    cache.set(file, module);
++    const js = ts.transpileModule(fs.readFileSync(file, "utf8"), {
++      compilerOptions: {
++        module: ts.ModuleKind.CommonJS,
++        target: ts.ScriptTarget.ES2022,
++      },
++    }).outputText;
++    function localRequire(spec) {
++      if (spec === "server-only") return {};
++      if (spec === "@supabase/supabase-js")
++        return {
++          createClient: () => ({
++            auth: {
++              getUser: async () => ({
++                data: {
++                  user: options.invalidAuth
++                    ? null
++                    : { id: options.user || owner },
++                },
++                error: null,
++              }),
++            },
++          }),
++        };
++      if (spec.endsWith("/supabase/admin"))
++        return { createAdminClient: () => admin };
++      if (spec === "@/src/lib/mux") return { getMux: () => mux };
++      if (spec.startsWith("@/"))
++        return load(path.join(root, spec.slice(2)) + ".ts");
++      if (spec.startsWith("."))
++        return load(path.resolve(path.dirname(file), spec) + ".ts");
++      return require(spec);
++    }
++    vm.runInNewContext(
++      `(function(require,module,exports,process,Buffer,console){${js}\n})`,
++      {},
++      { filename: file },
++    )(
++      localRequire,
++      module,
++      module.exports,
++      { env: environment },
++      Buffer,
++      console,
++    );
++    return module.exports;
++  }
++  const analysis = load(
++    path.join(root, "app/api/videos/[videoId]/analysis/route.ts"),
++  );
++  const playback = load(
++    path.join(root, "app/api/videos/[videoId]/playback/route.ts"),
++  );
++  const context = { params: Promise.resolve({ videoId: id }) };
++  const request = (method = "GET", body, token = true) =>
++    new Request("http://localhost/api/videos/" + id + "/analysis", {
++      method,
++      headers: token
++        ? {
++            Authorization: "Bearer fixture",
++            "Content-Type": "application/json",
++          }
++        : {},
++      ...(body === undefined
++        ? {}
++        : { body: typeof body === "string" ? body : JSON.stringify(body) }),
++    });
++  return { analysis, playback, context, request, rows, signed: () => signed };
++}
++test("anonymous and expired sessions are denied", async () => {
++  const f = fixture();
++  assert.equal(
++    (await f.analysis.GET(f.request("GET", undefined, false), f.context))
++      .status,
++    401,
++  );
++  const expired = fixture({ invalidAuth: true });
++  assert.equal(
++    (await expired.analysis.GET(expired.request(), expired.context)).status,
++    401,
++  );
++});
++test("owner and linked coach can open; unrelated identities cannot", async () => {
++  for (const [options, expected] of [
++    [{}, 200],
++    [{ user: coach, role: "coach", linked: true }, 200],
++    [{ user: coach, role: "coach" }, 404],
++    [{ user: coach, role: "player", linked: true }, 404],
++    [{ user: coach, role: "admin" }, 404],
++    [{ video: { status: "archived" } }, 404],
++  ]) {
++    const f = fixture(options);
++    assert.equal(
++      (await f.analysis.GET(f.request(), f.context)).status,
++      expected,
++    );
++  }
++});
++test("save, reload, optimistic concurrency and server-owned author", async () => {
++  const f = fixture();
++  const doc = { ...empty(), note: "Posture" };
++  const first = await f.analysis.PUT(
++    f.request("PUT", { document: doc, revision: 0, author_id: coach }),
++    f.context,
++  );
++  assert.equal(first.status, 200);
++  assert.equal((await first.json()).author_id, owner);
++  const read = await f.analysis.GET(f.request(), f.context);
++  assert.match(read.headers.get("cache-control"), /no-store/);
++  assert.equal((await read.json()).annotations[0].document.note, "Posture");
++  assert.equal(
++    (
++      await f.analysis.PUT(
++        f.request("PUT", { document: doc, revision: 0 }),
++        f.context,
++      )
++    ).status,
++    409,
++  );
++  assert.equal(
++    (
++      await f.analysis.PUT(
++        f.request("PUT", { document: doc, revision: 1 }),
++        f.context,
++      )
++    ).status,
++    200,
++  );
++  assert.equal(
++    (
++      await f.analysis.PUT(
++        f.request("PUT", { document: doc, revision: 1 }),
++        f.context,
++      )
++    ).status,
++    409,
++  );
++});
++test("reject malformed, oversized and invalid saves without writing", async () => {
++  const f = fixture();
++  for (const [body, status] of [
++    ["{", 400],
++    ["a".repeat(100001), 413],
++    [{ document: { ...empty(), note: "a".repeat(4001) }, revision: 0 }, 400],
++    [{ document: empty(), revision: -1 }, 400],
++  ])
++    assert.equal(
++      (await f.analysis.PUT(f.request("PUT", body), f.context)).status,
++      status,
++    );
++  assert.equal(f.rows.length, 0);
++});
++test("missing annotation table is a visible setup failure", async () => {
++  const f = fixture({ dbError: true });
++  const res = await f.analysis.GET(f.request(), f.context);
++  assert.equal(res.status, 503);
++  assert.match((await res.json()).error, /migration/);
++});
++test("signed playback has no-store headers and never returns signing credentials", async () => {
++  const f = fixture();
++  const res = await f.playback.POST(f.request("POST"), f.context);
++  assert.equal(res.status, 200);
++  assert.match(res.headers.get("cache-control"), /no-store/);
++  const body = await res.json();
++  assert.match(body.url, /signed-id.m3u8\?token=/);
++  assert.equal(body.fps, 30);
++  assert.equal("keySecret" in body, false);
++  assert.equal(f.signed(), 1);
++});
++test("do not sign unowned, unready, public-only or unconfigured assets", async () => {
++  for (const [options, expected] of [
++    [{ asset: { passthrough: "someone-else" } }, 409],
++    [{ asset: { status: "preparing" } }, 409],
++    [{ asset: { playback_ids: [{ id: "public", policy: "public" }] } }, 409],
++    [{ env: { MUX_SIGNING_PRIVATE_KEY: "" } }, 503],
++    [{ user: coach, role: "coach" }, 404],
++  ]) {
++    const f = fixture(options);
++    assert.equal(
++      (await f.playback.POST(f.request("POST"), f.context)).status,
++      expected,
++    );
++    assert.equal(f.signed(), 0);
++  }
++});
++test("installed Mux SDK signs valid one-hour playback JWTs using PEM or base64 keys", async () => {
++  const { privateKey, publicKey } = generateKeyPairSync("rsa", {
++    modulusLength: 2048,
++    privateKeyEncoding: { type: "pkcs8", format: "pem" },
++    publicKeyEncoding: { type: "spki", format: "pem" },
++  });
++  const mux = new Mux({ tokenId: "fixture", tokenSecret: "fixture" });
++  for (const keySecret of [
++    privateKey,
++    Buffer.from(privateKey).toString("base64"),
++  ]) {
++    const token = await mux.jwt.signPlaybackId("fixture-playback", {
++      keyId: "fixture-key",
++      keySecret,
++      type: "video",
++      expiration: "1h",
++    });
++    const [header, payload, signature] = token.split(".");
++    assert.equal(
++      verify(
++        "RSA-SHA256",
++        Buffer.from(header + "." + payload),
++        publicKey,
++        Buffer.from(signature, "base64url"),
++      ),
++      true,
++    );
++    const decoded = JSON.parse(Buffer.from(payload, "base64url"));
++    assert.equal(decoded.sub, "fixture-playback");
++    assert.equal(decoded.aud, "v");
++    assert.ok(
++      decoded.exp - Date.now() / 1000 > 3500 &&
++        decoded.exp - Date.now() / 1000 <= 3600,
++    );
++  }
++});
+-- 
+2.51.1
+
