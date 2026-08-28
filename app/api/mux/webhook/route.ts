@@ -17,10 +17,27 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
-  const passthrough = event.data?.passthrough;
-  const uploadId = event.type?.startsWith('video.upload.')
+  let assetData = event.data;
+  let passthrough = event.data?.passthrough;
+  let uploadId = event.type?.startsWith('video.upload.')
     ? event.data?.id
     : event.data?.upload_id;
+
+  // Asset webhook payloads do not always contain the originating upload ID or
+  // passthrough value. Retrieve the full asset so it can be linked back to the
+  // swing_videos row created before the upload began.
+  if (!passthrough && !uploadId && event.type?.startsWith('video.asset.')) {
+    const assetId = event.data?.id ?? event.object?.id;
+    if (assetId) {
+      try {
+        assetData = await mux.video.assets.retrieve(assetId);
+        passthrough = assetData.passthrough;
+        uploadId = assetData.upload_id;
+      } catch {
+        return NextResponse.json({ error: 'Mux asset lookup failed' }, { status: 500 });
+      }
+    }
+  }
   let videoId = passthrough as string | undefined;
 
   if (!videoId && uploadId) {
@@ -42,14 +59,14 @@ export async function POST(request: Request) {
   if (event.type === 'video.upload.asset_created') {
     await admin.from('swing_videos').update({ status: 'processing', mux_asset_id: event.data.asset_id }).eq('id', videoId);
   } else if (event.type === 'video.asset.ready') {
-    const signedPlayback = event.data.playback_ids?.find((p: any) => p.policy === 'signed');
+    const signedPlayback = assetData.playback_ids?.find((p: any) => p.policy === 'signed');
     await admin.from('swing_videos').update({
       status: 'ready',
-      mux_asset_id: event.data.id,
+      mux_asset_id: assetData.id,
       mux_playback_id: signedPlayback?.id ?? null,
-      duration_seconds: event.data.duration ?? null,
-      aspect_ratio: event.data.aspect_ratio ?? null,
-      max_stored_resolution: event.data.max_stored_resolution ?? null,
+      duration_seconds: assetData.duration ?? null,
+      aspect_ratio: assetData.aspect_ratio ?? null,
+      max_stored_resolution: assetData.max_stored_resolution ?? null,
       mux_error_message: null,
     }).eq('id', videoId);
   } else if (event.type === 'video.asset.errored') {

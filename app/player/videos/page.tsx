@@ -35,11 +35,30 @@ export default function PlayerVideosPage() {
         return;
       }
 
-      const { data, error: queryError } = await supabase
-        .from('swing_videos')
-        .select('id,swing_type,camera_view,club,status,created_at,player_question')
-        .eq('player_id', user.id)
-        .order('created_at', { ascending: false });
+      const loadVideos = () => supabase
+          .from('swing_videos')
+          .select('id,swing_type,camera_view,club,status,created_at,player_question')
+          .eq('player_id', user.id)
+          .order('created_at', { ascending: false });
+
+      let { data, error: queryError } = await loadVideos();
+
+      const needsRecovery = data?.some((video) =>
+        ['waiting_for_upload', 'uploading', 'processing'].includes(video.status)
+      );
+
+      if (!queryError && needsRecovery) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const response = await fetch('/api/videos/reconcile', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          if (response.ok) {
+            ({ data, error: queryError } = await loadVideos());
+          }
+        }
+      }
 
       if (queryError) setError('Your videos could not be loaded.');
       else setVideos((data ?? []) as SwingVideo[]);
