@@ -20,10 +20,22 @@ export type Drawing = {
 export type AnalysisDocument = { version: 1; shapes: Drawing[]; note: string };
 export type AnnotationSet = {
   author_id: string;
+  author_label?: string;
   revision: number;
   document: AnalysisDocument;
   updated_at: string;
 };
+// Open a saved drawing instead of silently starting before all annotations.
+export function firstDrawingTime(document: AnalysisDocument): number {
+  return document.shapes.length
+    ? Math.min(...document.shapes.map((shape) => shape.time))
+    : 0;
+}
+export function zoomTransform(zoom: number, x: number, y: number) {
+  const scale = clamp(zoom, 1, 4);
+  const limit = (scale - 1) * 50;
+  return `translate(${clamp(x, -100, 100) * limit / 100}%, ${clamp(y, -100, 100) * limit / 100}%) scale(${scale})`;
+}
 export const emptyDocument = (): AnalysisDocument => ({
   version: 1,
   shapes: [],

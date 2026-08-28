@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { VideoNavigation } from '@/src/components/video/VideoNavigation';
 import { AuthGate } from '@/app/ui/auth-gate';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { VideoStatusBadge } from '@/src/components/video/VideoStatusBadge';
@@ -68,6 +69,7 @@ export default function CoachVideoQueuePage() {
   return (
     <AuthGate>
       <main className="video-page">
+        <VideoNavigation coach />
         <header>
           <div>
             <p className="eyebrow">COACH WORKSPACE</p>

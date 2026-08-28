@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { VideoNavigation } from '@/src/components/video/VideoNavigation';
 import { useEffect, useState } from 'react';
 import { AuthGate } from '@/app/ui/auth-gate';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -69,6 +70,7 @@ export default function PlayerVideosPage() {
   return (
     <AuthGate>
       <main className="video-page">
+        <VideoNavigation />
         <header>
           <div>
             <p className="eyebrow">VIDEO ANALYSIS</p>

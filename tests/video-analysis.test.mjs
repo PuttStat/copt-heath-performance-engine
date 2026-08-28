@@ -8,6 +8,8 @@ import {
   stepTime,
   drawingVisible,
   formatTime,
+  firstDrawingTime,
+  zoomTransform,
 } from "../src/lib/video-analysis.ts";
 const drawing = () => ({
   id: "11111111-1111-4111-8111-111111111111",
@@ -20,6 +22,18 @@ const drawing = () => ({
   width: 3,
   time: 1,
   scope: "frame",
+});
+test("saved drawings reopen at the first annotated time", () => {
+  assert.equal(firstDrawingTime(emptyDocument()), 0);
+  const doc = { ...emptyDocument(), shapes: [{ ...drawing(), time: 3 }, drawing()] };
+  const time = firstDrawingTime(doc);
+  assert.equal(time, 1);
+  assert.ok(doc.shapes.some((s) => drawingVisible(s, time, 60)));
+});
+test("zoom keeps panning bounded and resets to the original viewport", () => {
+  assert.equal(zoomTransform(1, 100, -100), 'translate(0%, 0%) scale(1)');
+  assert.equal(zoomTransform(2, 100, -100), 'translate(50%, -50%) scale(2)');
+  assert.equal(zoomTransform(9, 200, -200), 'translate(150%, -150%) scale(4)');
 });
 test("access requires ownership or a coach/admin relationship", () => {
   assert.equal(canAccessVideo("a", "a", "player", false), true);

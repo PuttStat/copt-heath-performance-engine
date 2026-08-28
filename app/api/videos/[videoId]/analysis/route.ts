@@ -38,7 +38,12 @@ export async function GET(request: Request, context: Context) {
         aspect_ratio: video.aspect_ratio,
         isOwner: user.id === video.player_id,
       },
-      annotations: data,
+      annotations: (data ?? []).map((row, index) => ({
+        ...row,
+        author_label: row.author_id === video.player_id
+          ? "Player"
+          : `Coach / reviewer ${index + 1}`,
+      })),
     });
   });
 }

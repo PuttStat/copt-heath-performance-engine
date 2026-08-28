@@ -170,6 +170,22 @@
   height: 100%;
   object-fit: contain;
 }
+.swing-zoom-content {
+  position: absolute;
+  inset: 0;
+  transform-origin: center;
+}
+.swing-zoom-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+}
+.swing-zoom-controls label { flex: 1 1 150px; font-size: 13px; }
+.swing-zoom-controls input { display: block; width: 100%; }
+.swing-shared-notes article { border-top: 1px solid #d9e5dd; padding: 12px 0; }
+.swing-shared-notes p, .swing-question p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .swing-overlay {
   position: absolute;
   inset: 0;

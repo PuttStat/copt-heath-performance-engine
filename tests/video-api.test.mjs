@@ -206,6 +206,27 @@ test("anonymous and expired sessions are denied", async () => {
     401,
   );
 });
+test("player and coach both receive every saved drawing and note with author labels", async () => {
+  for (const options of [{}, { user: coach, role: 'coach', linked: true }]) {
+    const f = fixture(options);
+    for (const author of [owner, coach]) f.rows.push({
+      video_id: id, author_id: author, revision: 1,
+      document: { ...empty(), note: author === owner ? 'Player feedback' : 'Coach feedback',
+        shapes: [{ id, type: 'line', points: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.9 }],
+          color: '#f4c95d', width: 3, time: 2, scope: 'frame' }] },
+    });
+    const response = await f.analysis.GET(f.request(), f.context);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.annotations.length, 2);
+    assert.equal(body.annotations[0].author_label, 'Player');
+    assert.match(body.annotations[1].author_label, /Coach/);
+    assert.equal(body.annotations[0].document.note, 'Player feedback');
+    assert.equal(body.annotations[1].document.note, 'Coach feedback');
+    assert.equal(body.annotations[0].document.shapes[0].time, 2);
+    assert.equal(body.annotations[1].document.shapes[0].points[1].x, 0.8);
+  }
+});
 test("owner and linked coach can open; unrelated identities cannot", async () => {
   for (const [options, expected] of [
     [{}, 200],

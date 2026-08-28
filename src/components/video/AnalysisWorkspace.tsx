@@ -18,6 +18,8 @@ import {
   emptyDocument,
   formatTime,
   stepTime,
+  firstDrawingTime,
+  zoomTransform,
   type AnalysisDocument,
   type AnnotationSet,
   type Drawing,
@@ -114,10 +116,14 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
   const [tool, setTool] = useState<DrawingTool | "select">("select"),
     [color, setColor] = useState<string>(DRAWING_COLORS[0]),
     [width, setWidth] = useState(3),
-    [scope, setScope] = useState<"frame" | "video">("frame");
+    [scope, setScope] = useState<"frame" | "video">("video");
   const [selected, setSelected] = useState<string | null>(null),
     [layer, setLayer] = useState("mine"),
     [showDrawing, setShowDrawing] = useState(true);
+  const [zoom, setZoom] = useState(1),
+    [panX, setPanX] = useState(0),
+    [panY, setPanY] = useState(0),
+    [refreshingReviews, setRefreshingReviews] = useState(false);
   const [doc, setDoc] = useState<AnalysisDocument>(emptyDocument),
     [past, setPast] = useState<AnalysisDocument[]>([]),
     [future, setFuture] = useState<AnalysisDocument[]>([]);
@@ -140,6 +146,13 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
         setDoc(initial);
         setSaved(JSON.stringify(initial));
         setRevision(mine?.revision ?? 0);
+        const opening = mine?.document.shapes.length
+          ? mine
+          : data.annotations.find((s) => s.document.shapes.length);
+        if (opening) {
+          setLayer(opening.author_id === data.userId ? "mine" : opening.author_id);
+          restoreTime.current = firstDrawingTime(opening.document);
+        }
       })
       .catch((error) => {
         if (active) setLoadError(message(error));
@@ -148,10 +161,36 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
       active = false;
     };
   }, [videoId]);
+  async function refreshReviews() {
+    setRefreshingReviews(true);
+    try {
+      const data = await api<AnalysisResponse>(`/api/videos/${videoId}/analysis`);
+      // Never replace the current user's unsaved document or revision.
+      setInfo(data);
+      setSaveMessage("Shared reviews refreshed. Your own edits are unchanged.");
+    } catch (error) {
+      setSaveMessage(message(error));
+    } finally {
+      setRefreshingReviews(false);
+    }
+  }
+  function openLayer(value: string) {
+    const document = value === "mine" ? doc
+      : info?.annotations.find((s) => s.author_id === value)?.document;
+    setLayer(value);
+    setTool("select");
+    setSelected(null);
+    setShowDrawing(true);
+    if (document?.shapes.length) {
+      restoreTime.current = firstDrawingTime(document);
+      seek(restoreTime.current, true);
+    }
+  }
   const refreshPlayback = useCallback(async () => {
     setRequestingPlayback(true);
     setPlaybackError("");
-    restoreTime.current = video.current?.currentTime ?? restoreTime.current;
+    if (video.current && video.current.readyState >= 1)
+      restoreTime.current = video.current.currentTime;
     try {
       setPlayback(
         await api<Playback>(`/api/videos/${videoId}/playback`, {
@@ -277,7 +316,7 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
     setSelected(null);
   }
   async function save() {
-    if (saving || readOnly) return;
+    if (saving) return;
     const snapshot = doc;
     setSaving(true);
     setSaveMessage("");
@@ -436,6 +475,9 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
     >
       <header className="swing-header">
         <div>
+          <Link href="/" onClick={(event) => {
+            if (dirty && !window.confirm("Leave without saving your drawings and notes?")) event.preventDefault();
+          }}>← Dashboard</Link>{" · "}
           <Link
             href={
               info.video.isOwner ? "/player/videos" : "/coach/video-reviews"
@@ -464,9 +506,9 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
           <button
             className="swing-primary"
             onClick={() => void save()}
-            disabled={saving || readOnly || !dirty}
+            disabled={saving || !dirty}
           >
-            {saving ? "Saving…" : "Save drawings"}
+            {saving ? "Saving…" : "Save drawings & notes"}
           </button>
         </div>
       </header>
@@ -483,6 +525,7 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
                 width: `min(100%, ${60 * aspect}vh)`,
               }}
             >
+              <div className="swing-zoom-content" style={{ transform: zoomTransform(zoom, panX, panY) }}>
               <video
                 ref={video}
                 playsInline
@@ -533,6 +576,7 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
                   onPause={pause}
                 />
               )}
+              </div>
               {!mediaReady && (
                 <div className="swing-loading">
                   <span className="swing-monogram">V</span>
@@ -546,6 +590,21 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
                 </div>
               )}
             </div>
+          </div>
+          <div className="swing-zoom-controls" aria-label="Video zoom controls">
+            <label>Zoom {zoom.toFixed(1)}×
+              <input aria-label="Video zoom" type="range" min="1" max="4" step="0.1"
+                value={zoom} onChange={(event) => setZoom(Number(event.target.value))} />
+            </label>
+            <label>Move left / right
+              <input aria-label="Horizontal position" type="range" min="-100" max="100"
+                value={panX} disabled={zoom === 1} onChange={(event) => setPanX(Number(event.target.value))} />
+            </label>
+            <label>Move up / down
+              <input aria-label="Vertical position" type="range" min="-100" max="100"
+                value={panY} disabled={zoom === 1} onChange={(event) => setPanY(Number(event.target.value))} />
+            </label>
+            <button onClick={() => { setZoom(1); setPanX(0); setPanY(0); }}>Reset zoom</button>
           </div>
           {playbackError && (
             <div className="swing-media-error" role="alert">
@@ -734,28 +793,28 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
         <aside className="swing-inspector" aria-label="Drawing tools and notes">
           <div className="swing-panel-title">
             <h2>Drawing desk</h2>
-            <span>7I.2</span>
+            <span>7I.2.1</span>
           </div>
           <label className="swing-field">
-            Layer
+            Drawings to view
             <select
               value={layer}
-              onChange={(event) => {
-                setLayer(event.target.value);
-                setTool("select");
-                setSelected(null);
-              }}
+              onChange={(event) => openLayer(event.target.value)}
             >
               <option value="mine">My drawings & notes</option>
               {info.annotations
                 .filter((s) => s.author_id !== info.userId)
                 .map((s, i) => (
                   <option key={s.author_id} value={s.author_id}>
-                    Shared layer {i + 1} · read-only
+                    {s.author_label || `Shared review ${i + 1}`} · {s.document.shapes.length} drawings · read-only
                   </option>
                 ))}
             </select>
           </label>
+          <button disabled={refreshingReviews} onClick={() => void refreshReviews()}>
+            {refreshingReviews ? "Refreshing reviews…" : "Refresh shared reviews"}
+          </button>
+          <p className="swing-hint">Saved drawings: {activeDocument.shapes.length}. Moment drawings appear only at their saved time. Choose a saved moment below to reopen it.</p>
           <label className="swing-checkbox">
             <input
               type="checkbox"
@@ -905,16 +964,29 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
             </div>
           )}
           <label className="swing-field">
-            Analysis notes
+            My analysis notes
             <textarea
               rows={5}
               maxLength={4000}
               placeholder="What do you see? What should the player work on?"
-              value={activeDocument.note}
-              readOnly={readOnly}
+              value={doc.note}
               onChange={(event) => edit({ ...doc, note: event.target.value })}
             />
           </label>
+          <section className="swing-shared-notes" aria-label="Shared player and coach notes">
+            <h3>Player & coach feedback</h3>
+            {info.annotations.filter((s) => s.author_id !== info.userId).length === 0 &&
+              <p>No other saved reviews yet. Use Refresh shared reviews after the other person saves.</p>}
+            {info.annotations.filter((s) => s.author_id !== info.userId).map((s, i) => (
+              <article key={s.author_id}>
+                <h4>{s.author_label || `Shared review ${i + 1}`}</h4>
+                <p>{s.document.note || "No written notes in this review."}</p>
+                <button onClick={() => openLayer(s.author_id)} disabled={!s.document.shapes.length}>
+                  View {s.document.shapes.length} saved drawings
+                </button>
+              </article>
+            ))}
+          </section>
           <p className="swing-hint">
             Drawings and notes are shared with the player and authorised linked
             coaches when saved. They are not private drafts.
@@ -925,7 +997,7 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
           <button
             className="swing-primary"
             onClick={() => void save()}
-            disabled={saving || readOnly || !dirty}
+            disabled={saving || !dirty}
           >
             {saving ? "Saving…" : "Save drawings & notes"}
           </button>
