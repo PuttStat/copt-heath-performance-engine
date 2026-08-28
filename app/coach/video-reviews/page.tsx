@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { AuthGate } from '@/app/ui/auth-gate';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { VideoStatusBadge } from '@/src/components/video/VideoStatusBadge';
@@ -89,6 +90,7 @@ export default function CoachVideoQueuePage() {
                   <h2>{video.player_name} · {video.club}</h2>
                   <p>{video.swing_type.replaceAll('_', ' ')} · {video.camera_view.replaceAll('_', ' ')}</p>
                   {video.player_question && <blockquote>{video.player_question}</blockquote>}
+                  {video.status === 'ready' && <Link className="primary-button" style={{display:'inline-block',marginTop:16}} href={`/player/videos/${video.id}`}>Open analysis →</Link>}
                 </div>
                 <time>{new Date(video.created_at).toLocaleDateString('en-GB')}</time>
               </article>

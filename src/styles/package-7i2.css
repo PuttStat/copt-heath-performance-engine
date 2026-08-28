@@ -1,0 +1,553 @@
+.swing-studio {
+  --forest: #143c2a;
+  --gold: #e4bb59;
+  --ink: #17322a;
+  --muted: #596c63;
+  color: var(--ink);
+  background: #f4f2ea;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 30px clamp(12px, 3vw, 42px) 50px;
+  font-family: Arial, sans-serif;
+  box-sizing: border-box;
+  outline: none;
+}
+.swing-studio * {
+  box-sizing: border-box;
+}
+.swing-studio h1 {
+  font-family: Georgia, serif;
+  font-size: clamp(28px, 3vw, 42px);
+  font-weight: 500;
+  line-height: 1.15;
+  margin: 8px 0;
+}
+.swing-studio h2 {
+  font-size: 19px;
+  font-weight: 600;
+  margin: 0;
+}
+.swing-studio h3 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+.swing-studio p {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+.swing-studio a {
+  color: var(--forest);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.swing-eyebrow {
+  font-size: 11px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  margin-top: 24px !important;
+  color: var(--muted);
+}
+.swing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 26px;
+}
+.swing-header > div > p:last-child {
+  font-size: 14px;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+.swing-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.swing-save-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+.swing-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  gap: 20px;
+  align-items: start;
+}
+.swing-player {
+  min-width: 0;
+  background: white;
+  border: 1px solid #dce2d8;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.swing-inspector {
+  background: #fff;
+  border: 1px solid #dce2d8;
+  border-radius: 16px;
+  padding: 22px;
+  min-width: 0;
+}
+.swing-panel-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e1e5df;
+  padding-bottom: 18px;
+  margin-bottom: 18px;
+}
+.swing-panel-title span {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+.swing-studio button {
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.25;
+  border: 1px solid #d2dcd4;
+  background: #fff;
+  color: var(--ink);
+  border-radius: 7px;
+  padding: 10px 12px;
+  cursor: pointer;
+  min-height: 40px;
+}
+.swing-studio button:hover:not(:disabled) {
+  background: #eaf0e8;
+}
+.swing-studio button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.swing-studio button:focus-visible,
+.swing-studio input:focus-visible,
+.swing-studio select:focus-visible,
+.swing-studio textarea:focus-visible,
+.swing-studio a:focus-visible,
+.swing-studio summary:focus-visible {
+  outline: 3px solid #dca82b;
+  outline-offset: 3px;
+}
+.swing-studio .swing-primary,
+.swing-studio .swing-play {
+  background: var(--forest);
+  border-color: var(--forest);
+  color: white;
+  font-weight: 700;
+}
+.swing-studio .swing-primary:hover:not(:disabled),
+.swing-studio .swing-play:hover:not(:disabled) {
+  background: #24563c;
+}
+.swing-studio .swing-primary {
+  padding: 13px 18px;
+}
+.swing-inspector > .swing-primary {
+  width: 100%;
+  margin-top: 12px;
+}
+.swing-canvas-area {
+  background: #10221c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 16px;
+}
+.swing-stage {
+  position: relative;
+  max-width: 100%;
+  max-height: 60vh;
+  background: #091510;
+  overflow: hidden;
+}
+.swing-stage video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.swing-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}
+.swing-overlay.is-select {
+  cursor: default;
+}
+.swing-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #d8e2d5;
+  text-align: center;
+  font-size: 13px;
+}
+.swing-monogram {
+  font-family: Georgia, serif;
+  color: var(--gold);
+  font-style: italic;
+  font-size: 60px;
+}
+.swing-media-error {
+  background: #fff1e8;
+  padding: 14px 20px;
+  color: #8b311f;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.swing-playback-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e3e8e0;
+}
+.swing-clock {
+  font:
+    14px ui-monospace,
+    monospace;
+  margin-right: auto;
+  font-variant-numeric: tabular-nums;
+}
+.swing-clock span {
+  color: var(--muted);
+}
+.swing-playback-toolbar button {
+  font-size: 11px;
+  padding: 8px 10px;
+}
+.swing-timeline {
+  padding: 20px;
+}
+.swing-timeline > label,
+.swing-fine-heading label {
+  font-size: 12px;
+  font-weight: 700;
+}
+.swing-studio input[type="range"] {
+  width: 100%;
+  height: 32px;
+  margin: 8px 0 14px;
+  accent-color: var(--forest);
+  cursor: ew-resize;
+}
+.swing-transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.swing-transport label {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 12px;
+  margin-left: auto;
+}
+.swing-transport .swing-play {
+  min-width: 76px;
+}
+.swing-fine-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.swing-fine-heading button {
+  font-size: 11px;
+}
+.swing-loop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.swing-loop label,
+.swing-loop span {
+  font-size: 12px;
+}
+.swing-loop span {
+  color: var(--muted);
+}
+.swing-loop input,
+.swing-checkbox input {
+  accent-color: var(--forest);
+}
+.swing-studio select,
+.swing-studio textarea,
+.swing-studio input[type="number"] {
+  background: #f8faf6;
+  border: 1px solid #d7e0d5;
+  border-radius: 6px;
+  color: var(--ink);
+  padding: 9px;
+  font: inherit;
+  font-size: 13px;
+  min-height: 40px;
+  max-width: 100%;
+}
+.swing-studio textarea {
+  resize: vertical;
+  width: 100%;
+  line-height: 1.5;
+}
+.swing-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+.swing-checkbox {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+.swing-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.swing-tools button {
+  text-transform: capitalize;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
+  padding: 10px 4px;
+  min-height: 65px;
+  font-size: 11px;
+}
+.swing-tools button span {
+  font-size: 21px;
+}
+.swing-tools button[aria-pressed="true"] {
+  background: var(--forest);
+  color: white;
+  border-color: var(--forest);
+}
+.swing-hint {
+  color: var(--muted);
+  font-size: 11px !important;
+  line-height: 1.6 !important;
+  margin: 12px 0 !important;
+}
+.swing-colors {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 16px 0;
+}
+.swing-colors button {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #bac8bc;
+  flex-shrink: 0;
+}
+.swing-colors button[aria-pressed="true"] {
+  outline: 2px solid var(--forest);
+  outline-offset: 3px;
+}
+.swing-colors select {
+  margin-left: auto;
+  min-width: 0;
+  padding: 7px;
+  font-size: 11px;
+}
+.swing-edit-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin-bottom: 20px;
+}
+.swing-edit-actions button {
+  padding: 8px 4px;
+  font-size: 11px;
+}
+.swing-moments {
+  border-top: 1px solid #e3e8e0;
+  padding-top: 18px;
+  margin-bottom: 18px;
+}
+.swing-moments h3 {
+  display: flex;
+  justify-content: space-between;
+}
+.swing-moments h3 span {
+  font-weight: 400;
+  color: var(--muted);
+}
+.swing-moments ul {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  max-height: 190px;
+  overflow: auto;
+}
+.swing-moments li {
+  margin: 5px 0;
+}
+.swing-moments button {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  background: #f7f9f4;
+}
+.swing-moments button span:last-child {
+  margin-left: auto;
+  font:
+    10px ui-monospace,
+    monospace;
+}
+.swing-moments button[aria-pressed="true"] {
+  border-color: var(--forest);
+}
+.swing-question {
+  padding: 14px;
+  background: #f1f4e9;
+  border-radius: 8px;
+  margin-bottom: 18px;
+}
+.swing-question p {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.swing-save-message {
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.swing-precision {
+  margin-top: 20px;
+  border-top: 1px solid #e3e8e0;
+  padding-top: 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.swing-precision summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.swing-precision label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.swing-precision input {
+  width: 95px;
+}
+.swing-notice {
+  padding: 30px;
+  background: white;
+  border-radius: 14px;
+}
+.swing-notice button {
+  margin-left: 20px;
+}
+.swing-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  max-width: none;
+  overflow: auto;
+}
+@media (max-width: 1100px) {
+  .swing-workbench {
+    grid-template-columns: minmax(0, 1fr) 270px;
+    gap: 12px;
+  }
+  .swing-inspector {
+    padding: 16px;
+  }
+  .swing-header-actions {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  .swing-colors {
+    gap: 8px;
+  }
+}
+@media (max-width: 760px) {
+  .swing-studio {
+    padding: 20px 12px 36px;
+  }
+  .swing-header {
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .swing-header-actions > .swing-primary {
+    font-size: 11px;
+    padding: 10px;
+  }
+  .swing-save-status {
+    font-size: 10px;
+  }
+  .swing-workbench {
+    grid-template-columns: 1fr;
+  }
+  .swing-eyebrow {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+  }
+  .swing-timeline {
+    padding: 14px;
+  }
+  .swing-canvas-area {
+    padding: 8px;
+  }
+  .swing-transport {
+    gap: 5px;
+  }
+  .swing-transport button {
+    font-size: 11px;
+    padding: 9px 7px;
+  }
+  .swing-transport label {
+    margin-left: 0;
+  }
+  .swing-inspector {
+    padding: 20px;
+  }
+  .swing-tools {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .swing-playback-toolbar {
+    padding: 10px;
+  }
+  .swing-header h1 {
+    font-size: 28px;
+  }
+  .swing-stage {
+    max-height: 60vh;
+  }
+  .swing-colors button {
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+  }
+  .swing-save-message {
+    min-height: 18px;
+  }
+}

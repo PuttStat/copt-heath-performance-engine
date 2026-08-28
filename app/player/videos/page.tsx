@@ -92,6 +92,7 @@ export default function PlayerVideosPage() {
                 <p>{video.camera_view.replaceAll('_', ' ')}</p>
                 <small>{new Date(video.created_at).toLocaleDateString('en-GB')}</small>
                 {video.player_question && <p>{video.player_question}</p>}
+                {video.status === 'ready' && <Link className="primary-button" style={{display:'inline-block',marginTop:16}} href={`/player/videos/${video.id}`}>Open analysis →</Link>}
               </article>
             ))}
           </section>
