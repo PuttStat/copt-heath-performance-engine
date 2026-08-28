@@ -1,0 +1,579 @@
+diff --git a/PACKAGE_7I_2_1_SETUP.md b/PACKAGE_7I_2_1_SETUP.md
+new file mode 100644
+index 0000000..9e7d08e
+--- /dev/null
++++ b/PACKAGE_7I_2_1_SETUP.md
+@@ -0,0 +1,112 @@
++# Vector Golf Performance — 7I.2.1
++
++Drawings, shared feedback, zoom and video navigation.
++
++Apply this update after the working 7I.2 package. It does not replace 7I.1 or 7I.2 and needs no new SQL migration, dependencies or environment variables. Existing saved reviews remain intact. Nothing has been pushed to your live site by this package.
++
++## What changes
++
++- Opening an analysis seeks to the first saved drawing in your layer. If you have no drawings, it opens another saved drawing layer when one exists.
++- Selecting another person's drawing layer jumps to its first saved drawing. Saved-moment buttons still reopen individual moments.
++- New drawings default to “Throughout the video”. You can still choose “At this moment only”. Existing moment drawings keep their original scope; no saved data is rewritten.
++- Your editable notes remain separate from the clearly labelled, read-only player/coach feedback displayed below them. You can save your own notes even while viewing someone else's drawings.
++- “Refresh shared reviews” retrieves other people's latest saved feedback without replacing your own unsaved edits. Refresh is manual; this is not live collaborative editing.
++- Zoom from 1× to 4×; use the horizontal and vertical sliders to centre the golfer, or Reset zoom. The video and drawings share one transform, so drawings remain attached to the same positions. Zoom does not increase the source video's detail. Zoom is a viewing preference and is not saved with the review.
++- Dashboard desktop/mobile menus include My videos and Upload a swing. Coaches/admins also receive Video reviews. Video pages link back to the dashboard.
++- A new service-worker cache version helps existing installations pick up the updated interface.
++
++## Installation in Codespaces
++
++Run each command separately. If any command reports an error, stop and share the message. Do not force-push, rerun the old patch, or use `git add .`.
++
++1. Download and unzip this package on your Mac.
++2. Upload `0001-Fix-7I.2-reviews-zoom-navigation.patch` to the Codespaces project root: the folder containing `package.json`. Do not put it inside `.next`, `app`, or `src`.
++3. Open the Codespaces Terminal. Check for outstanding source edits:
++
++```bash
++git status --short -- app src public tests package.json package-lock.json
++```
++
++If source changes are listed, stop before applying the patch. Existing `.next` build changes and downloaded untracked patch files are not part of this update; leave them alone.
++
++4. Download the latest committed changes:
++
++```bash
++git pull --ff-only
++```
++
++If Git says branches have diverged, stop and send the output rather than force-pushing.
++
++5. Check the patch:
++
++```bash
++git apply --check 0001-Fix-7I.2-reviews-zoom-navigation.patch
++```
++
++No output means the check passed. Then apply it once:
++
++```bash
++git apply 0001-Fix-7I.2-reviews-zoom-navigation.patch
++```
++
++6. Test and build (existing 7I.2 dependencies must already be installed):
++
++```bash
++npm run test:video
++```
++
++Expected: 19 tests pass.
++
++```bash
++npm run build
++```
++
++Expected: a completed route list with no build errors.
++
++7. Stage ONLY the update's source, tests and instructions. Paste this whole command:
++
++```bash
++git add app/ui/app-shell.tsx app/player/videos/page.tsx app/player/videos/upload/page.tsx app/coach/video-reviews/page.tsx 'app/api/videos/[videoId]/analysis/route.ts' src/components/video/AnalysisWorkspace.tsx src/components/video/VideoNavigation.tsx src/lib/video-analysis.ts src/styles/package-7i2.css public/sw.js tests/video-analysis.test.mjs tests/video-api.test.mjs PACKAGE_7I_2_1_SETUP.md
++```
++
++Check what will be committed:
++
++```bash
++git diff --cached --stat
++```
++
++Expected: 13 files, none under `.next` or `node_modules`, and no secrets. Stop if other files appear.
++
++8. Commit and push:
++
++```bash
++git commit -m "Fix video reviews, shared notes, zoom and navigation"
++```
++
++```bash
++git push origin main
++```
++
++If the push is rejected, keep your commit and send the output. Do not force-push.
++
++9. In Vercel, wait for this commit's production deployment to show Ready. Reload the site. If the old controls remain, close all open Vector tabs and reopen the site so the updated service worker can take control.
++
++## Test on the deployed site
++
++1. Sign in as a player, use My videos, and open an existing saved review. It should show a saved drawing at its recorded time (if any were saved).
++2. Look at “Saved drawings” and “Saved moments”. If the count is zero, that layer contains no persisted drawings; this update cannot recover drawings that were never saved. Choose another layer or create a drawing and press Save drawings & notes.
++3. Make a whole-video line and a moment-only angle at a later time. Write a note, save, leave, then reopen. Check both drawings with their saved-moment buttons.
++4. Sign in as the linked coach. The player's note should appear under Player & coach feedback. Use View saved drawings to see the player's layer. Drawings belonging to another author stay read-only.
++5. Add your own coach drawings and note, save, then return as the player. Reopen the analysis or press Refresh shared reviews; confirm the coach's feedback is visible.
++6. Set zoom to 2× or 4× and move the golfer into view. Draw a line, reset zoom, save and reload; it should remain attached to the same video coordinates. Test portrait and landscape clips on the devices you use.
++7. Check the desktop and mobile dashboard menus. Player: My videos / Upload a swing. Coach: also Video reviews.
++
++## Verification performed before delivery
++
++- All 19 automated geometry, validation, access, API persistence and signing tests passed.
++- Production Next.js build passed.
++- React DOM simulation passed for saved moment reopening, shared notes in both directions, saving only your own notes while viewing another layer, zoom coordinate conversion, save/reload, and refreshing shared reviews without losing unsaved edits. Video media and backend were mocked in this test.
++- The patch is checked against the previously delivered 7I.2 source baseline.
++- Live Safari/mobile rendering, real signed Mux playback and your production database remain deployment checks; they were not exercised from this workspace.
++
++The inspected 7I.2 code already saved notes and shapes together. Its default frame-only drawings and hidden shared-layer notes can make saved content look missing. This update addresses those display paths; a zero drawing count after a successful save would need separate investigation using the affected review's API response, without sharing credentials.
+diff --git a/app/api/videos/[videoId]/analysis/route.ts b/app/api/videos/[videoId]/analysis/route.ts
+index 27465a0..7bebc70 100644
+--- a/app/api/videos/[videoId]/analysis/route.ts
++++ b/app/api/videos/[videoId]/analysis/route.ts
+@@ -38,7 +38,12 @@ export async function GET(request: Request, context: Context) {
+         aspect_ratio: video.aspect_ratio,
+         isOwner: user.id === video.player_id,
+       },
+-      annotations: data,
++      annotations: (data ?? []).map((row, index) => ({
++        ...row,
++        author_label: row.author_id === video.player_id
++          ? "Player"
++          : `Coach / reviewer ${index + 1}`,
++      })),
+     });
+   });
+ }
+diff --git a/app/coach/video-reviews/page.tsx b/app/coach/video-reviews/page.tsx
+index ea790aa..030c8bc 100644
+--- a/app/coach/video-reviews/page.tsx
++++ b/app/coach/video-reviews/page.tsx
+@@ -2,6 +2,7 @@
+ 
+ import { useEffect, useState } from 'react';
+ import Link from 'next/link';
++import { VideoNavigation } from '@/src/components/video/VideoNavigation';
+ import { AuthGate } from '@/app/ui/auth-gate';
+ import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+ import { VideoStatusBadge } from '@/src/components/video/VideoStatusBadge';
+@@ -68,6 +69,7 @@ export default function CoachVideoQueuePage() {
+   return (
+     <AuthGate>
+       <main className="video-page">
++        <VideoNavigation coach />
+         <header>
+           <div>
+             <p className="eyebrow">COACH WORKSPACE</p>
+diff --git a/app/player/videos/page.tsx b/app/player/videos/page.tsx
+index 1a29241..44af02f 100644
+--- a/app/player/videos/page.tsx
++++ b/app/player/videos/page.tsx
+@@ -1,6 +1,7 @@
+ 'use client';
+ 
+ import Link from 'next/link';
++import { VideoNavigation } from '@/src/components/video/VideoNavigation';
+ import { useEffect, useState } from 'react';
+ import { AuthGate } from '@/app/ui/auth-gate';
+ import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+@@ -69,6 +70,7 @@ export default function PlayerVideosPage() {
+   return (
+     <AuthGate>
+       <main className="video-page">
++        <VideoNavigation />
+         <header>
+           <div>
+             <p className="eyebrow">VIDEO ANALYSIS</p>
+diff --git a/app/player/videos/upload/page.tsx b/app/player/videos/upload/page.tsx
+index 4ca01b3..4f30c25 100644
+--- a/app/player/videos/upload/page.tsx
++++ b/app/player/videos/upload/page.tsx
+@@ -1,12 +1,14 @@
+ 'use client';
+ 
+ import { AuthGate } from '@/app/ui/auth-gate';
++import { VideoNavigation } from '@/src/components/video/VideoNavigation';
+ import { VideoUploadForm } from '@/src/components/video/VideoUploadForm';
+ 
+ export default function UploadSwingPage() {
+   return (
+     <AuthGate>
+       <main className="video-page video-page--narrow">
++        <VideoNavigation />
+         <p className="eyebrow">VIDEO ANALYSIS</p>
+         <h1>Upload a swing</h1>
+         <p>
+diff --git a/app/ui/app-shell.tsx b/app/ui/app-shell.tsx
+index a668897..d474030 100644
+--- a/app/ui/app-shell.tsx
++++ b/app/ui/app-shell.tsx
+@@ -1,4 +1,4 @@
+ "use client";
+ import type{ReactNode}from"react";import Link from"next/link";import{AuthGate}from"./auth-gate";import{usePlayerData}from"../../lib/use-player-data";import{getSupabaseBrowserClient}from"../../lib/supabase/client";
+-const nav=[["today","Today","/"],["rounds","Rounds","/rounds/new"],["performance","Performance","/performance"],["diagnostics","Evidence","/diagnostics"],["programme","Programme","/programme"],["practice","Practice","/practice"],["progress","Progress","/progress"],["sessions","Sessions","/sessions"],["coach","Coach","/coach"],["players","Players","/players"],["trackman","TrackMan","/trackman"],["library","Library","/library"],["pilot","Pilot","/pilot"],["release","Release","/release"],["settings","Settings","/settings"]]as const;
+-export function AppShell({active,children}:{active:string;children:ReactNode}){const{profile}=usePlayerData();const name=profile?.display_name||profile?.email||"Selected player";const initials=name.split(/\s|@/).filter(Boolean).slice(0,2).map(part=>part[0]).join("").toUpperCase();const coach=profile?.role==="coach"||profile?.role==="admin";const visibleNav=nav.filter(([id])=>coach?id!=="rounds":!["coach","sessions","players","library","release"].includes(id));const signOut=async()=>{await getSupabaseBrowserClient()?.auth.signOut();window.location.replace("/auth/login")};return <AuthGate><div className="app-frame"><a className="skip-link" href="#main-content">Skip to main content</a><header className="topbar"><Link className="brand" href="/" aria-label="Vector Golf Performance home"><span className="brand-mark" aria-hidden="true">V</span><span>VECTOR <small>GOLF PERFORMANCE</small></span></Link><nav aria-label="Primary navigation">{visibleNav.map(([id,label,href])=><Link aria-current={active===id?"page":undefined} className={active===id?"active":""} href={href} key={id}>{label}</Link>)}</nav><button className="profile profile-button" onClick={signOut} title="Sign out"><span><strong>{name}</strong><small>{profile?.role||"Beta access"} · Sign out</small></span><b aria-hidden="true">{initials||"VG"}</b></button></header><main id="main-content" tabIndex={-1} className="main-content">{children}</main><nav className="mobile-nav" aria-label="Mobile navigation">{visibleNav.map(([id,label,href])=><Link aria-current={active===id?"page":undefined} className={active===id?"active":""} href={href} key={id}><span aria-hidden="true">{id==="today"?"⌂":id==="rounds"?"+":id==="performance"?"↗":id==="diagnostics"?"◎":id==="programme"?"▦":id==="practice"?"✓":id==="progress"?"↻":id==="coach"?"◉":"◇"}</span>{label}</Link>)}</nav></div></AuthGate>}
++const nav=[["today","Today","/"],["rounds","Rounds","/rounds/new"],["performance","Performance","/performance"],["diagnostics","Evidence","/diagnostics"],["programme","Programme","/programme"],["practice","Practice","/practice"],["progress","Progress","/progress"],["sessions","Sessions","/sessions"],["coach","Coach","/coach"],["players","Players","/players"],["videos","My videos","/player/videos"],["video-upload","Upload a swing","/player/videos/upload"],["video-reviews","Video reviews","/coach/video-reviews"],["trackman","TrackMan","/trackman"],["library","Library","/library"],["pilot","Pilot","/pilot"],["release","Release","/release"],["settings","Settings","/settings"]]as const;
++export function AppShell({active,children}:{active:string;children:ReactNode}){const{profile}=usePlayerData();const name=profile?.display_name||profile?.email||"Selected player";const initials=name.split(/\s|@/).filter(Boolean).slice(0,2).map(part=>part[0]).join("").toUpperCase();const coach=profile?.role==="coach"||profile?.role==="admin";const visibleNav=nav.filter(([id])=>coach?id!=="rounds":!["coach","sessions","players","library","release","video-reviews"].includes(id));const signOut=async()=>{await getSupabaseBrowserClient()?.auth.signOut();window.location.replace("/auth/login")};return <AuthGate><div className="app-frame"><a className="skip-link" href="#main-content">Skip to main content</a><header className="topbar"><Link className="brand" href="/" aria-label="Vector Golf Performance home"><span className="brand-mark" aria-hidden="true">V</span><span>VECTOR <small>GOLF PERFORMANCE</small></span></Link><nav aria-label="Primary navigation">{visibleNav.map(([id,label,href])=><Link aria-current={active===id?"page":undefined} className={active===id?"active":""} href={href} key={id}>{label}</Link>)}</nav><button className="profile profile-button" onClick={signOut} title="Sign out"><span><strong>{name}</strong><small>{profile?.role||"Beta access"} · Sign out</small></span><b aria-hidden="true">{initials||"VG"}</b></button></header><main id="main-content" tabIndex={-1} className="main-content">{children}</main><nav className="mobile-nav" aria-label="Mobile navigation">{visibleNav.map(([id,label,href])=><Link aria-current={active===id?"page":undefined} className={active===id?"active":""} href={href} key={id}><span aria-hidden="true">{id==="today"?"⌂":id==="rounds"?"+":id==="performance"?"↗":id==="diagnostics"?"◎":id==="programme"?"▦":id==="practice"?"✓":id==="progress"?"↻":id==="coach"?"◉":"◇"}</span>{label}</Link>)}</nav></div></AuthGate>}
+diff --git a/public/sw.js b/public/sw.js
+index 2fb37ee..fa60b55 100644
+--- a/public/sw.js
++++ b/public/sw.js
+@@ -1,4 +1,4 @@
+-const CACHE='vector-golf-shell-v3';const OLD=['vector-golf-shell-v1','vector-golf-shell-v2'];const SHELL=['/','/rounds/new','/rounds/detailed','/performance','/practice','/programme','/progress','/sync','/manifest.webmanifest'];
++const CACHE='vector-golf-shell-v4';const OLD=['vector-golf-shell-v1','vector-golf-shell-v2','vector-golf-shell-v3'];const SHELL=['/','/rounds/new','/rounds/detailed','/performance','/practice','/programme','/progress','/sync','/manifest.webmanifest'];
+ self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)))});
+ self.addEventListener('activate',event=>event.waitUntil(Promise.all([self.clients.claim(),...OLD.map(name=>caches.delete(name))])));
+ self.addEventListener('fetch',event=>{if(event.request.method!=='GET')return;const url=new URL(event.request.url);if(url.origin!==self.location.origin||url.pathname.startsWith('/api/')||event.request.headers.has('Authorization'))return;if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).then(response=>{const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy));return response}).catch(()=>caches.match(event.request).then(hit=>hit||caches.match('/'))));return}event.respondWith(caches.match(event.request).then(hit=>hit||fetch(event.request).then(response=>{if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy))}return response})))});
+diff --git a/src/components/video/AnalysisWorkspace.tsx b/src/components/video/AnalysisWorkspace.tsx
+index e3be7de..8f6c348 100644
+--- a/src/components/video/AnalysisWorkspace.tsx
++++ b/src/components/video/AnalysisWorkspace.tsx
+@@ -18,6 +18,8 @@ import {
+   emptyDocument,
+   formatTime,
+   stepTime,
++  firstDrawingTime,
++  zoomTransform,
+   type AnalysisDocument,
+   type AnnotationSet,
+   type Drawing,
+@@ -114,10 +116,14 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+   const [tool, setTool] = useState<DrawingTool | "select">("select"),
+     [color, setColor] = useState<string>(DRAWING_COLORS[0]),
+     [width, setWidth] = useState(3),
+-    [scope, setScope] = useState<"frame" | "video">("frame");
++    [scope, setScope] = useState<"frame" | "video">("video");
+   const [selected, setSelected] = useState<string | null>(null),
+     [layer, setLayer] = useState("mine"),
+     [showDrawing, setShowDrawing] = useState(true);
++  const [zoom, setZoom] = useState(1),
++    [panX, setPanX] = useState(0),
++    [panY, setPanY] = useState(0),
++    [refreshingReviews, setRefreshingReviews] = useState(false);
+   const [doc, setDoc] = useState<AnalysisDocument>(emptyDocument),
+     [past, setPast] = useState<AnalysisDocument[]>([]),
+     [future, setFuture] = useState<AnalysisDocument[]>([]);
+@@ -140,6 +146,13 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+         setDoc(initial);
+         setSaved(JSON.stringify(initial));
+         setRevision(mine?.revision ?? 0);
++        const opening = mine?.document.shapes.length
++          ? mine
++          : data.annotations.find((s) => s.document.shapes.length);
++        if (opening) {
++          setLayer(opening.author_id === data.userId ? "mine" : opening.author_id);
++          restoreTime.current = firstDrawingTime(opening.document);
++        }
+       })
+       .catch((error) => {
+         if (active) setLoadError(message(error));
+@@ -148,10 +161,36 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+       active = false;
+     };
+   }, [videoId]);
++  async function refreshReviews() {
++    setRefreshingReviews(true);
++    try {
++      const data = await api<AnalysisResponse>(`/api/videos/${videoId}/analysis`);
++      // Never replace the current user's unsaved document or revision.
++      setInfo(data);
++      setSaveMessage("Shared reviews refreshed. Your own edits are unchanged.");
++    } catch (error) {
++      setSaveMessage(message(error));
++    } finally {
++      setRefreshingReviews(false);
++    }
++  }
++  function openLayer(value: string) {
++    const document = value === "mine" ? doc
++      : info?.annotations.find((s) => s.author_id === value)?.document;
++    setLayer(value);
++    setTool("select");
++    setSelected(null);
++    setShowDrawing(true);
++    if (document?.shapes.length) {
++      restoreTime.current = firstDrawingTime(document);
++      seek(restoreTime.current, true);
++    }
++  }
+   const refreshPlayback = useCallback(async () => {
+     setRequestingPlayback(true);
+     setPlaybackError("");
+-    restoreTime.current = video.current?.currentTime ?? restoreTime.current;
++    if (video.current && video.current.readyState >= 1)
++      restoreTime.current = video.current.currentTime;
+     try {
+       setPlayback(
+         await api<Playback>(`/api/videos/${videoId}/playback`, {
+@@ -277,7 +316,7 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+     setSelected(null);
+   }
+   async function save() {
+-    if (saving || readOnly) return;
++    if (saving) return;
+     const snapshot = doc;
+     setSaving(true);
+     setSaveMessage("");
+@@ -436,6 +475,9 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+     >
+       <header className="swing-header">
+         <div>
++          <Link href="/" onClick={(event) => {
++            if (dirty && !window.confirm("Leave without saving your drawings and notes?")) event.preventDefault();
++          }}>← Dashboard</Link>{" · "}
+           <Link
+             href={
+               info.video.isOwner ? "/player/videos" : "/coach/video-reviews"
+@@ -464,9 +506,9 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+           <button
+             className="swing-primary"
+             onClick={() => void save()}
+-            disabled={saving || readOnly || !dirty}
++            disabled={saving || !dirty}
+           >
+-            {saving ? "Saving…" : "Save drawings"}
++            {saving ? "Saving…" : "Save drawings & notes"}
+           </button>
+         </div>
+       </header>
+@@ -483,6 +525,7 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+                 width: `min(100%, ${60 * aspect}vh)`,
+               }}
+             >
++              <div className="swing-zoom-content" style={{ transform: zoomTransform(zoom, panX, panY) }}>
+               <video
+                 ref={video}
+                 playsInline
+@@ -533,6 +576,7 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+                   onPause={pause}
+                 />
+               )}
++              </div>
+               {!mediaReady && (
+                 <div className="swing-loading">
+                   <span className="swing-monogram">V</span>
+@@ -547,6 +591,21 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+               )}
+             </div>
+           </div>
++          <div className="swing-zoom-controls" aria-label="Video zoom controls">
++            <label>Zoom {zoom.toFixed(1)}×
++              <input aria-label="Video zoom" type="range" min="1" max="4" step="0.1"
++                value={zoom} onChange={(event) => setZoom(Number(event.target.value))} />
++            </label>
++            <label>Move left / right
++              <input aria-label="Horizontal position" type="range" min="-100" max="100"
++                value={panX} disabled={zoom === 1} onChange={(event) => setPanX(Number(event.target.value))} />
++            </label>
++            <label>Move up / down
++              <input aria-label="Vertical position" type="range" min="-100" max="100"
++                value={panY} disabled={zoom === 1} onChange={(event) => setPanY(Number(event.target.value))} />
++            </label>
++            <button onClick={() => { setZoom(1); setPanX(0); setPanY(0); }}>Reset zoom</button>
++          </div>
+           {playbackError && (
+             <div className="swing-media-error" role="alert">
+               {playbackError}
+@@ -734,28 +793,28 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+         <aside className="swing-inspector" aria-label="Drawing tools and notes">
+           <div className="swing-panel-title">
+             <h2>Drawing desk</h2>
+-            <span>7I.2</span>
++            <span>7I.2.1</span>
+           </div>
+           <label className="swing-field">
+-            Layer
++            Drawings to view
+             <select
+               value={layer}
+-              onChange={(event) => {
+-                setLayer(event.target.value);
+-                setTool("select");
+-                setSelected(null);
+-              }}
++              onChange={(event) => openLayer(event.target.value)}
+             >
+               <option value="mine">My drawings & notes</option>
+               {info.annotations
+                 .filter((s) => s.author_id !== info.userId)
+                 .map((s, i) => (
+                   <option key={s.author_id} value={s.author_id}>
+-                    Shared layer {i + 1} · read-only
++                    {s.author_label || `Shared review ${i + 1}`} · {s.document.shapes.length} drawings · read-only
+                   </option>
+                 ))}
+             </select>
+           </label>
++          <button disabled={refreshingReviews} onClick={() => void refreshReviews()}>
++            {refreshingReviews ? "Refreshing reviews…" : "Refresh shared reviews"}
++          </button>
++          <p className="swing-hint">Saved drawings: {activeDocument.shapes.length}. Moment drawings appear only at their saved time. Choose a saved moment below to reopen it.</p>
+           <label className="swing-checkbox">
+             <input
+               type="checkbox"
+@@ -905,16 +964,29 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+             </div>
+           )}
+           <label className="swing-field">
+-            Analysis notes
++            My analysis notes
+             <textarea
+               rows={5}
+               maxLength={4000}
+               placeholder="What do you see? What should the player work on?"
+-              value={activeDocument.note}
+-              readOnly={readOnly}
++              value={doc.note}
+               onChange={(event) => edit({ ...doc, note: event.target.value })}
+             />
+           </label>
++          <section className="swing-shared-notes" aria-label="Shared player and coach notes">
++            <h3>Player & coach feedback</h3>
++            {info.annotations.filter((s) => s.author_id !== info.userId).length === 0 &&
++              <p>No other saved reviews yet. Use Refresh shared reviews after the other person saves.</p>}
++            {info.annotations.filter((s) => s.author_id !== info.userId).map((s, i) => (
++              <article key={s.author_id}>
++                <h4>{s.author_label || `Shared review ${i + 1}`}</h4>
++                <p>{s.document.note || "No written notes in this review."}</p>
++                <button onClick={() => openLayer(s.author_id)} disabled={!s.document.shapes.length}>
++                  View {s.document.shapes.length} saved drawings
++                </button>
++              </article>
++            ))}
++          </section>
+           <p className="swing-hint">
+             Drawings and notes are shared with the player and authorised linked
+             coaches when saved. They are not private drafts.
+@@ -925,7 +997,7 @@ export function AnalysisWorkspace({ videoId }: { videoId: string }) {
+           <button
+             className="swing-primary"
+             onClick={() => void save()}
+-            disabled={saving || readOnly || !dirty}
++            disabled={saving || !dirty}
+           >
+             {saving ? "Saving…" : "Save drawings & notes"}
+           </button>
+diff --git a/src/components/video/VideoNavigation.tsx b/src/components/video/VideoNavigation.tsx
+new file mode 100644
+index 0000000..20ce622
+--- /dev/null
++++ b/src/components/video/VideoNavigation.tsx
+@@ -0,0 +1,10 @@
++import Link from 'next/link';
++
++export function VideoNavigation({ coach = false }: { coach?: boolean }) {
++  return <nav aria-label="Video navigation" style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 24 }}>
++    <Link href="/">← Dashboard</Link>
++    <Link href="/player/videos">My videos</Link>
++    <Link href="/player/videos/upload">Upload a swing</Link>
++    {coach && <Link href="/coach/video-reviews">Video reviews</Link>}
++  </nav>;
++}
+diff --git a/src/lib/video-analysis.ts b/src/lib/video-analysis.ts
+index 09dec40..eca7142 100644
+--- a/src/lib/video-analysis.ts
++++ b/src/lib/video-analysis.ts
+@@ -20,10 +20,22 @@ export type Drawing = {
+ export type AnalysisDocument = { version: 1; shapes: Drawing[]; note: string };
+ export type AnnotationSet = {
+   author_id: string;
++  author_label?: string;
+   revision: number;
+   document: AnalysisDocument;
+   updated_at: string;
+ };
++// Open a saved drawing instead of silently starting before all annotations.
++export function firstDrawingTime(document: AnalysisDocument): number {
++  return document.shapes.length
++    ? Math.min(...document.shapes.map((shape) => shape.time))
++    : 0;
++}
++export function zoomTransform(zoom: number, x: number, y: number) {
++  const scale = clamp(zoom, 1, 4);
++  const limit = (scale - 1) * 50;
++  return `translate(${clamp(x, -100, 100) * limit / 100}%, ${clamp(y, -100, 100) * limit / 100}%) scale(${scale})`;
++}
+ export const emptyDocument = (): AnalysisDocument => ({
+   version: 1,
+   shapes: [],
+diff --git a/src/styles/package-7i2.css b/src/styles/package-7i2.css
+index 0f2bc3d..749db49 100644
+--- a/src/styles/package-7i2.css
++++ b/src/styles/package-7i2.css
+@@ -170,6 +170,22 @@
+   height: 100%;
+   object-fit: contain;
+ }
++.swing-zoom-content {
++  position: absolute;
++  inset: 0;
++  transform-origin: center;
++}
++.swing-zoom-controls {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 12px;
++  align-items: center;
++  padding: 12px;
++}
++.swing-zoom-controls label { flex: 1 1 150px; font-size: 13px; }
++.swing-zoom-controls input { display: block; width: 100%; }
++.swing-shared-notes article { border-top: 1px solid #d9e5dd; padding: 12px 0; }
++.swing-shared-notes p, .swing-question p { white-space: pre-wrap; overflow-wrap: anywhere; }
+ .swing-overlay {
+   position: absolute;
+   inset: 0;
+diff --git a/tests/video-analysis.test.mjs b/tests/video-analysis.test.mjs
+index ffc5775..aaed8ec 100644
+--- a/tests/video-analysis.test.mjs
++++ b/tests/video-analysis.test.mjs
+@@ -8,6 +8,8 @@ import {
+   stepTime,
+   drawingVisible,
+   formatTime,
++  firstDrawingTime,
++  zoomTransform,
+ } from "../src/lib/video-analysis.ts";
+ const drawing = () => ({
+   id: "11111111-1111-4111-8111-111111111111",
+@@ -21,6 +23,18 @@ const drawing = () => ({
+   time: 1,
+   scope: "frame",
+ });
++test("saved drawings reopen at the first annotated time", () => {
++  assert.equal(firstDrawingTime(emptyDocument()), 0);
++  const doc = { ...emptyDocument(), shapes: [{ ...drawing(), time: 3 }, drawing()] };
++  const time = firstDrawingTime(doc);
++  assert.equal(time, 1);
++  assert.ok(doc.shapes.some((s) => drawingVisible(s, time, 60)));
++});
++test("zoom keeps panning bounded and resets to the original viewport", () => {
++  assert.equal(zoomTransform(1, 100, -100), 'translate(0%, 0%) scale(1)');
++  assert.equal(zoomTransform(2, 100, -100), 'translate(50%, -50%) scale(2)');
++  assert.equal(zoomTransform(9, 200, -200), 'translate(150%, -150%) scale(4)');
++});
+ test("access requires ownership or a coach/admin relationship", () => {
+   assert.equal(canAccessVideo("a", "a", "player", false), true);
+   assert.equal(canAccessVideo("b", "a", "coach", true), true);
+diff --git a/tests/video-api.test.mjs b/tests/video-api.test.mjs
+index e02b590..ec9955a 100644
+--- a/tests/video-api.test.mjs
++++ b/tests/video-api.test.mjs
+@@ -206,6 +206,27 @@ test("anonymous and expired sessions are denied", async () => {
+     401,
+   );
+ });
++test("player and coach both receive every saved drawing and note with author labels", async () => {
++  for (const options of [{}, { user: coach, role: 'coach', linked: true }]) {
++    const f = fixture(options);
++    for (const author of [owner, coach]) f.rows.push({
++      video_id: id, author_id: author, revision: 1,
++      document: { ...empty(), note: author === owner ? 'Player feedback' : 'Coach feedback',
++        shapes: [{ id, type: 'line', points: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.9 }],
++          color: '#f4c95d', width: 3, time: 2, scope: 'frame' }] },
++    });
++    const response = await f.analysis.GET(f.request(), f.context);
++    assert.equal(response.status, 200);
++    const body = await response.json();
++    assert.equal(body.annotations.length, 2);
++    assert.equal(body.annotations[0].author_label, 'Player');
++    assert.match(body.annotations[1].author_label, /Coach/);
++    assert.equal(body.annotations[0].document.note, 'Player feedback');
++    assert.equal(body.annotations[1].document.note, 'Coach feedback');
++    assert.equal(body.annotations[0].document.shapes[0].time, 2);
++    assert.equal(body.annotations[1].document.shapes[0].points[1].x, 0.8);
++  }
++});
+ test("owner and linked coach can open; unrelated identities cannot", async () => {
+   for (const [options, expected] of [
+     [{}, 200],
