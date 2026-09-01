@@ -3,27 +3,27 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "../ui/app-shell";
 import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 import { usePlayerData } from "../../lib/use-player-data";
+import { buildDiagnosticObservations, type MissAggregate } from "../../lib/diagnostic-engine";
+import {
+  recommendPlanItems,
+  recommendationForSession,
+  splitMinutes,
+  type ApprovedPrescription,
+  type PlanningPhase,
+  type RecommendationLibraryItem,
+} from "../../lib/programme-recommendation";
 type Player = { id: string; display_name: string | null; email: string };
-type Programme = { id: string; player_id: string; status: string };
+type Programme = { id: string; player_id: string; status: string; planning_mode: "coach_led" | "self_directed" };
 type Week = {
   id: string;
   week_number: number;
-  phase: string;
+  phase: PlanningPhase;
   focus: string;
   golf_minutes: number;
   vector_minutes: number;
   status: string;
 };
-type Item = {
-  id: string;
-  code: string;
-  title: string;
-  item_type: "golf_drill" | "vector_exercise";
-  purpose: string;
-  dosage: string | null;
-  pass_criterion: string | null;
-  instruction_complete: boolean;
-};
+type Item = RecommendationLibraryItem;
 type Block = {
   id: string;
   sequence: number;
@@ -34,6 +34,10 @@ type Block = {
   success_criterion: string | null;
   library_item_id: string | null;
   source_case_id: string | null;
+  recommendation_source: "vector_engine" | "coach_approved" | "coach_override" | "player_override" | null;
+  recommendation_rationale: string | null;
+  recommendation_score: number | null;
+  evidence_snapshot: Record<string, unknown> | null;
   library_items: Item | null;
 };
 type Session = {
@@ -52,11 +56,6 @@ const stageByPhase: Record<string, string[]> = {
   Transfer: ["random", "pressure", "transfer"],
   Perform: ["pressure", "transfer", "baseline"],
 };
-const split = (total: number, count: number) =>
-  Array.from(
-    { length: count },
-    (_, i) => Math.floor(total / count) + (i < total % count ? 1 : 0),
-  );
 export default function SessionsPage() {
   const { profile } = usePlayerData(),
     [players, setPlayers] = useState<Player[]>([]),
@@ -66,13 +65,15 @@ export default function SessionsPage() {
     [weekId, setWeekId] = useState(""),
     [sessions, setSessions] = useState<Session[]>([]),
     [library, setLibrary] = useState<Item[]>([]),
-    [approvedItems, setApprovedItems] = useState<
-      Array<{ item: Item; caseId: string }>
-    >([]),
+    [approvedItems, setApprovedItems] = useState<ApprovedPrescription[]>([]),
+    [bandRows, setBandRows] = useState<Array<{ shot_band: string; opportunities: number | null; successes: number | null }>>([]),
+    [misses, setMisses] = useState<MissAggregate[]>([]),
+    [intake, setIntake] = useState<{ sessions_per_week: number; facilities: string[]; recovery_constraints: string } | null>(null),
     [message, setMessage] = useState("");
   const canCoach = profile?.role === "coach" || profile?.role === "admin";
   const targetId = canCoach ? selectedId : profile?.id || "";
   const week = weeks.find((item) => item.id === weekId);
+  const canPlan = canCoach || (!!programme && programme.planning_mode === "self_directed" && programme.player_id === profile?.id);
   const loadPlayers = useCallback(async () => {
     const sb = getSupabaseBrowserClient();
     if (!sb || !profile || !canCoach) return;
@@ -95,13 +96,13 @@ export default function SessionsPage() {
     if (!sb || !targetId) return;
     const { data: p } = await sb
       .from("programmes")
-      .select("id,player_id,status")
+      .select("id,player_id,status,planning_mode")
       .eq("player_id", targetId)
       .in(
         "status",
         canCoach
           ? ["draft", "published", "completed"]
-          : ["published", "completed"],
+          : ["draft", "published", "completed"],
       )
       .order("created_at", { ascending: false })
       .limit(1)
@@ -111,7 +112,7 @@ export default function SessionsPage() {
       setWeeks([]);
       return;
     }
-    const [{ data: w }, { data: l }, { data: c }] = await Promise.all([
+    const [{ data: w }, { data: l }, { data: c }, { data: results }, { data: detailed }, { data: intakeRow }] = await Promise.all([
       sb
         .from("programme_weeks")
         .select("id,week_number,phase,focus,golf_minutes,vector_minutes,status")
@@ -120,7 +121,7 @@ export default function SessionsPage() {
       sb
         .from("library_items")
         .select(
-          "id,code,title,item_type,purpose,dosage,pass_criterion,instruction_complete",
+          "id,code,title,item_type,category,stage,purpose,dosage,pass_criterion,equipment,guardrails,instruction_complete",
         )
         .eq("status", "approved")
         .eq("instruction_complete", true)
@@ -128,10 +129,13 @@ export default function SessionsPage() {
       sb
         .from("diagnostic_cases")
         .select(
-          "id,case_recommendations(library_items(id,code,title,item_type,purpose,dosage,pass_criterion,instruction_complete))",
+          "id,priority_score,evidence_summary,case_recommendations(rationale,library_items(id,code,title,item_type,category,stage,purpose,dosage,pass_criterion,equipment,guardrails,instruction_complete))",
         )
         .eq("player_id", targetId)
         .eq("status", "approved"),
+      sb.from("shot_band_results").select("shot_band,opportunities,successes").eq("player_id", targetId),
+      sb.from("detailed_shots").select("shot_band,success,miss_length,miss_direction").eq("player_id", targetId),
+      sb.from("programme_intakes").select("sessions_per_week,facilities,recovery_constraints").eq("player_id", targetId).maybeSingle(),
     ]);
     const weekRows = (w || []) as Week[];
     setWeeks(weekRows);
@@ -141,7 +145,21 @@ export default function SessionsPage() {
         : weekRows[0]?.id || "",
     );
     setLibrary((l || []) as Item[]);
-    const approved: Array<{ item: Item; caseId: string }> = [];
+    setBandRows((results || []) as typeof bandRows);
+    const missMap: Record<string, MissAggregate> = {};
+    for (const shot of detailed || []) {
+      const row = missMap[shot.shot_band] ||= { shot_band: shot.shot_band, failures: 0, short: 0, long: 0, left: 0, right: 0 };
+      if (!shot.success) {
+        row.failures++;
+        if (shot.miss_length === "short") row.short++;
+        if (shot.miss_length === "long") row.long++;
+        if (shot.miss_direction === "left") row.left++;
+        if (shot.miss_direction === "right") row.right++;
+      }
+    }
+    setMisses(Object.values(missMap));
+    setIntake(intakeRow as typeof intake);
+    const approved: ApprovedPrescription[] = [];
     for (const diagnostic of c || [])
       for (const rec of diagnostic.case_recommendations || []) {
         const raw = rec.library_items as unknown;
@@ -150,7 +168,7 @@ export default function SessionsPage() {
           item?.instruction_complete &&
           !approved.some((entry) => entry.item.id === item.id)
         )
-          approved.push({ item, caseId: diagnostic.id });
+          approved.push({ item, caseId: diagnostic.id, priorityScore: Number(diagnostic.priority_score || 0), rationale: rec.rationale || diagnostic.evidence_summary });
       }
     setApprovedItems(approved);
   }, [targetId, canCoach]);
@@ -160,7 +178,7 @@ export default function SessionsPage() {
     const { data } = await sb
       .from("programme_sessions")
       .select(
-        "id,session_number,title,scheduled_day,objective,status,session_blocks(id,sequence,domain,stage,minutes,instructions,success_criterion,library_item_id,source_case_id,library_items(id,code,title,item_type,purpose,dosage,pass_criterion,instruction_complete))",
+        "id,session_number,title,scheduled_day,objective,status,session_blocks(id,sequence,domain,stage,minutes,instructions,success_criterion,library_item_id,source_case_id,recommendation_source,recommendation_rationale,recommendation_score,evidence_snapshot,library_items(id,code,title,item_type,category,stage,purpose,dosage,pass_criterion,equipment,guardrails,instruction_complete))",
       )
       .eq("programme_week_id", weekId)
       .order("session_number");
@@ -199,24 +217,37 @@ export default function SessionsPage() {
     totals.vector === week.vector_minutes &&
     totals.missing === 0 &&
     totals.notReady === 0;
+  const aggregates = useMemo(() => Object.values(bandRows.reduce<Record<string, { shot_band: string; opportunities: number; successes: number }>>((map, row) => {
+    const aggregate = map[row.shot_band] ||= { shot_band: row.shot_band, opportunities: 0, successes: 0 };
+    aggregate.opportunities += row.opportunities || 0;
+    aggregate.successes += row.successes || 0;
+    return map;
+  }, {})), [bandRows]);
+  const observations = useMemo(() => buildDiagnosticObservations(aggregates, misses), [aggregates, misses]);
+  const suggestions = useMemo(() => week ? recommendPlanItems({
+    library,
+    observations,
+    approved: approvedItems,
+    phase: week.phase,
+    facilities: intake?.facilities || [],
+    recoveryConstraints: intake?.recovery_constraints || "",
+  }) : null, [week, library, observations, approvedItems, intake]);
   const buildWeek = async () => {
     const sb = getSupabaseBrowserClient();
-    if (!sb || !week || !canCoach) return;
+    if (!sb || !week || !canPlan || !suggestions) return;
     if (sessions.length) {
       setMessage(
         "This week already has sessions. Remove or edit them instead of rebuilding.",
       );
       return;
     }
-    const golfItems = approvedItems.filter(
-        (x) => x.item.item_type === "golf_drill",
-      ),
-      vectorItems = approvedItems.filter(
-        (x) => x.item.item_type === "vector_exercise",
-      );
-    const sessionCount = 3,
-      golfSplit = split(week.golf_minutes, sessionCount),
-      vectorSplit = split(week.vector_minutes, Math.min(2, sessionCount));
+    if (!suggestions.golf.length || (week.vector_minutes > 0 && !suggestions.vector.length)) {
+      setMessage("Vector needs more usable evidence or suitable player-ready library items before it can build this week.");
+      return;
+    }
+    const sessionCount = Math.min(7, Math.max(1, intake?.sessions_per_week || 3)),
+      golfSplit = splitMinutes(week.golf_minutes, sessionCount),
+      vectorSplit = splitMinutes(week.vector_minutes, Math.min(2, sessionCount));
     const { data: created, error } = await sb
       .from("programme_sessions")
       .insert(
@@ -236,7 +267,7 @@ export default function SessionsPage() {
     const stages = stageByPhase[week.phase] || ["skill", "random", "transfer"];
     const blocks: Array<Record<string, unknown>> = [];
     created.forEach((session, i) => {
-      const selected = golfItems[i % Math.max(golfItems.length, 1)];
+      const selected = recommendationForSession(suggestions.golf, week.week_number, i);
       if (golfSplit[i] > 0)
         blocks.push({
           session_id: session.id,
@@ -245,7 +276,11 @@ export default function SessionsPage() {
           stage: stages[i % stages.length],
           minutes: golfSplit[i],
           library_item_id: selected?.item.id || null,
-          source_case_id: selected?.caseId || null,
+          source_case_id: selected?.sourceCaseId || null,
+          recommendation_source: selected?.sourceCaseId ? "coach_approved" : "vector_engine",
+          recommendation_rationale: selected?.rationale || null,
+          recommendation_score: selected?.score || null,
+          evidence_snapshot: selected?.evidence || null,
           instructions:
             selected?.item.purpose || "Coach to assign an approved drill.",
           success_criterion:
@@ -253,7 +288,7 @@ export default function SessionsPage() {
             "Record the agreed success measure before progressing.",
         });
       if (i < vectorSplit.length && vectorSplit[i] > 0) {
-        const v = vectorItems[i % Math.max(vectorItems.length, 1)];
+        const v = recommendationForSession(suggestions.vector, week.week_number, i);
         blocks.push({
           session_id: session.id,
           sequence: 2,
@@ -261,7 +296,11 @@ export default function SessionsPage() {
           stage: "vector",
           minutes: vectorSplit[i],
           library_item_id: v?.item.id || null,
-          source_case_id: v?.caseId || null,
+          source_case_id: v?.sourceCaseId || null,
+          recommendation_source: v?.sourceCaseId ? "coach_approved" : "vector_engine",
+          recommendation_rationale: v?.rationale || null,
+          recommendation_score: v?.score || null,
+          evidence_snapshot: v?.evidence || null,
           instructions:
             v?.item.purpose ||
             "Assign Vector support only after a demonstrated movement requirement.",
@@ -277,9 +316,9 @@ export default function SessionsPage() {
     setMessage(
       blockError
         ? blockError.message
-        : golfItems.length
-          ? "Week built from the coach-approved prescription."
-          : "Week built with unassigned blocks. Select approved library items before release.",
+        : suggestions.requiresReview
+          ? "Suggested week built. Review the Vector exercise against the player's recovery constraints before release."
+          : "Vector built the suggested week from the player's ranked evidence. Review or change any item before release.",
     );
     await loadSessions();
   };
@@ -383,6 +422,12 @@ export default function SessionsPage() {
         </section>
       )}
       {week && (
+        <>
+        {suggestions && <section className="vector-suggestion-summary">
+          <div><span>Vector recommendation</span><strong>{suggestions.evidenceSummary}</strong></div>
+          <small>{suggestions.golf.length} suitable drills · {suggestions.vector.length} suitable Vector exercises</small>
+          {suggestions.requiresReview && <b>Recovery constraint: review exercise choice before release</b>}
+        </section>}
         <section className="reconcile-bar">
           <div>
             <span>Golf</span>
@@ -409,22 +454,23 @@ export default function SessionsPage() {
           <b className={balanced ? "balanced" : "unbalanced"}>
             {balanced ? "Ready to release" : "Reconciliation required"}
           </b>
-          {canCoach && !sessions.length && (
+          {canPlan && !sessions.length && (
             <button onClick={buildWeek}>Build suggested week</button>
           )}
-          {canCoach && sessions.length > 0 && (
+          {canPlan && sessions.length > 0 && (
             <button disabled={!balanced} onClick={release}>
-              Release week
+              {canCoach ? "Release week" : "Add week to my plan"}
             </button>
           )}
         </section>
+        </>
       )}
       <section className="session-builder">
         {sessions.map((session) => (
           <article className="planned-session" key={session.id}>
             <header>
               <span>Session {session.session_number}</span>
-              {canCoach ? (
+              {canPlan ? (
                 <>
                   <input
                     value={session.title}
@@ -477,7 +523,7 @@ export default function SessionsPage() {
                   >
                     <span>{block.stage}</span>
                     <div>
-                      {canCoach ? (
+                      {canPlan ? (
                         <select
                           value={block.library_item_id || ""}
                           onChange={(e) => {
@@ -488,12 +534,17 @@ export default function SessionsPage() {
                               library_item_id: e.target.value || null,
                               instructions: item?.purpose || null,
                               success_criterion: item?.pass_criterion || null,
+                              source_case_id: null,
+                              recommendation_source: canCoach ? "coach_override" : "player_override",
+                              recommendation_rationale: canCoach
+                                ? "Coach changed Vector's suggested item after reviewing the player."
+                                : "Player selected an alternative player-ready item.",
+                              recommendation_score: null,
+                              evidence_snapshot: null,
                             });
                           }}
                         >
-                          <option value="">
-                            Assign player-ready library item
-                          </option>
+                          <option value="">Choose a different player-ready item</option>
                           {selectable(block.domain).map((item) => (
                             <option value={item.id} key={item.id}>
                               {item.code} · {item.title}
@@ -504,6 +555,9 @@ export default function SessionsPage() {
                         <h3>{block.library_items?.title}</h3>
                       )}
                       <p>{block.instructions}</p>
+                      {block.recommendation_rationale && (
+                        <p className="recommendation-reason"><b>Why Vector suggested this:</b> {block.recommendation_rationale}</p>
+                      )}
                       {block.library_items?.dosage && (
                         <small>{block.library_items.dosage}</small>
                       )}
@@ -511,7 +565,7 @@ export default function SessionsPage() {
                         <small>Success: {block.success_criterion}</small>
                       )}
                     </div>
-                    {canCoach ? (
+                    {canPlan ? (
                       <label>
                         Minutes
                         <input
@@ -550,8 +604,8 @@ export default function SessionsPage() {
           <div className="empty-state compact">
             <h2>No sessions built for this week</h2>
             <p>
-              {canCoach
-                ? "Build the suggested week, then verify every library assignment and minute before release."
+              {canPlan
+                ? "Build Vector's suggested week, then review every assignment and minute before adding it to the plan."
                 : "Your coach has not released this week yet."}
             </p>
           </div>
