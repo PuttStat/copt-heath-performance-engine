@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildVectorWorkout,
   recommendPlanItems,
   recommendationForSession,
   splitMinutes,
 } from "../lib/programme-recommendation.ts";
+import { suggestSwingMovement } from "../lib/swing-movement-recommendation.ts";
 
 const item = (code, item_type = "golf_drill", equipment = "") => ({
   id: code,
@@ -97,4 +99,38 @@ test("no evidence produces no invented prescription", () => {
   const plan = recommendPlanItems({ library: [item("DR-3A-01")], observations: [], phase: "Measure" });
   assert.equal(plan.golf.length, 0);
   assert.match(plan.evidenceSummary, /No usable playing evidence/);
+});
+
+test("a 60 minute Vector workout contains several roles and reconciles exactly", () => {
+  const vector = [
+    { ...item("VEC-STR-01", "vector_exercise"), title: "Goblet squat", category: "Strength" },
+    { ...item("VEC-STR-06", "vector_exercise"), title: "Single arm row", category: "Strength" },
+    { ...item("VEC-PWR-01", "vector_exercise"), title: "Medicine ball throw", category: "Power" },
+    { ...item("VEC-UNI-05", "vector_exercise"), title: "Pallof press", category: "Unilateral" },
+    { ...item("VEC-CON-01", "vector_exercise"), title: "Bike intervals", category: "Conditioning" },
+  ];
+  const workout = buildVectorWorkout({ recommended: [], library: vector, phase: "Build", totalMinutes: 60 });
+  assert.equal(workout.length, 5);
+  assert.equal(workout.reduce((total, block) => total + block.minutes, 0), 60);
+  assert.equal(workout.at(-1).role, "conditioning");
+  assert.equal(new Set(workout.map((block) => block.item.id)).size, workout.length);
+});
+
+test("full swing drills receive a changeable P-system movement suggestion", () => {
+  const movements = ["P1", "P6", "P7"].map((position) => ({
+    id: position, code: `VSM-${position}`, p_position: position, title: position,
+    body_target: "", pressure_target: "", hands_arms_target: "", shaft_face_target: "",
+    incorrect_patterns: "", rehearsal: "", acceptance_gate: "", applicable_categories: ["full swing"],
+  }));
+  const drill = { ...item("DRILL-PATH"), title: "Delivery path station", category: "Long game" };
+  const suggestion = suggestSwingMovement(drill, movements);
+  assert.equal(suggestion.movement?.p_position, "P6");
+  assert.match(suggestion.rationale, /not a diagnosis/i);
+});
+
+test("stock 7-iron P-system movement is not imposed on putting", () => {
+  const drill = { ...item("PUTT-01"), title: "Putting gate", category: "Putting" };
+  const suggestion = suggestSwingMovement(drill, []);
+  assert.equal(suggestion.movement, null);
+  assert.match(suggestion.rationale, /not automatically applied/i);
 });
