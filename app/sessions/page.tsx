@@ -6,12 +6,17 @@ import { usePlayerData } from "../../lib/use-player-data";
 import { buildDiagnosticObservations, type MissAggregate } from "../../lib/diagnostic-engine";
 import {
   recommendPlanItems,
+  buildVectorWorkout,
   recommendationForSession,
   splitMinutes,
   type ApprovedPrescription,
   type PlanningPhase,
   type RecommendationLibraryItem,
 } from "../../lib/programme-recommendation";
+import {
+  suggestSwingMovement,
+  type SwingMovement,
+} from "../../lib/swing-movement-recommendation";
 type Player = { id: string; display_name: string | null; email: string };
 type Programme = { id: string; player_id: string; status: string; planning_mode: "coach_led" | "self_directed" };
 type Week = {
@@ -38,6 +43,10 @@ type Block = {
   recommendation_rationale: string | null;
   recommendation_score: number | null;
   evidence_snapshot: Record<string, unknown> | null;
+  swing_movement_id: string | null;
+  swing_movement_source: "vector_engine" | "coach_override" | "player_override" | null;
+  swing_movement_rationale: string | null;
+  swing_movements: SwingMovement | null;
   library_items: Item | null;
 };
 type Session = {
@@ -65,6 +74,7 @@ export default function SessionsPage() {
     [weekId, setWeekId] = useState(""),
     [sessions, setSessions] = useState<Session[]>([]),
     [library, setLibrary] = useState<Item[]>([]),
+    [swingMovements, setSwingMovements] = useState<SwingMovement[]>([]),
     [approvedItems, setApprovedItems] = useState<ApprovedPrescription[]>([]),
     [bandRows, setBandRows] = useState<Array<{ shot_band: string; opportunities: number | null; successes: number | null }>>([]),
     [misses, setMisses] = useState<MissAggregate[]>([]),
@@ -112,7 +122,7 @@ export default function SessionsPage() {
       setWeeks([]);
       return;
     }
-    const [{ data: w }, { data: l }, { data: c }, { data: results }, { data: detailed }, { data: intakeRow }] = await Promise.all([
+    const [{ data: w }, { data: l }, { data: movementRows }, { data: c }, { data: results }, { data: detailed }, { data: intakeRow }] = await Promise.all([
       sb
         .from("programme_weeks")
         .select("id,week_number,phase,focus,golf_minutes,vector_minutes,status")
@@ -126,6 +136,11 @@ export default function SessionsPage() {
         .eq("status", "approved")
         .eq("instruction_complete", true)
         .order("code"),
+      sb
+        .from("swing_movements")
+        .select("id,code,p_position,title,body_target,pressure_target,hands_arms_target,shaft_face_target,incorrect_patterns,rehearsal,acceptance_gate,applicable_categories")
+        .eq("status", "approved")
+        .order("p_position"),
       sb
         .from("diagnostic_cases")
         .select(
@@ -145,6 +160,7 @@ export default function SessionsPage() {
         : weekRows[0]?.id || "",
     );
     setLibrary((l || []) as Item[]);
+    setSwingMovements((movementRows || []) as SwingMovement[]);
     setBandRows((results || []) as typeof bandRows);
     const missMap: Record<string, MissAggregate> = {};
     for (const shot of detailed || []) {
@@ -178,7 +194,7 @@ export default function SessionsPage() {
     const { data } = await sb
       .from("programme_sessions")
       .select(
-        "id,session_number,title,scheduled_day,objective,status,session_blocks(id,sequence,domain,stage,minutes,instructions,success_criterion,library_item_id,source_case_id,recommendation_source,recommendation_rationale,recommendation_score,evidence_snapshot,library_items(id,code,title,item_type,category,stage,purpose,dosage,pass_criterion,equipment,guardrails,instruction_complete))",
+        "id,session_number,title,scheduled_day,objective,status,session_blocks(id,sequence,domain,stage,minutes,instructions,success_criterion,library_item_id,source_case_id,recommendation_source,recommendation_rationale,recommendation_score,evidence_snapshot,swing_movement_id,swing_movement_source,swing_movement_rationale,swing_movements(id,code,p_position,title,body_target,pressure_target,hands_arms_target,shaft_face_target,incorrect_patterns,rehearsal,acceptance_gate,applicable_categories),library_items(id,code,title,item_type,category,stage,purpose,dosage,pass_criterion,equipment,guardrails,instruction_complete))",
       )
       .eq("programme_week_id", weekId)
       .order("session_number");
@@ -241,7 +257,7 @@ export default function SessionsPage() {
       );
       return;
     }
-    if (!suggestions.golf.length || (week.vector_minutes > 0 && !suggestions.vector.length)) {
+    if (!suggestions.golf.length || (week.vector_minutes > 0 && !library.some((item) => item.item_type === "vector_exercise" && item.instruction_complete))) {
       setMessage("Vector needs more usable evidence or suitable player-ready library items before it can build this week.");
       return;
     }
@@ -268,6 +284,7 @@ export default function SessionsPage() {
     const blocks: Array<Record<string, unknown>> = [];
     created.forEach((session, i) => {
       const selected = recommendationForSession(suggestions.golf, week.week_number, i);
+      const movementSuggestion = suggestSwingMovement(selected?.item, swingMovements);
       if (golfSplit[i] > 0)
         blocks.push({
           session_id: session.id,
@@ -281,6 +298,9 @@ export default function SessionsPage() {
           recommendation_rationale: selected?.rationale || null,
           recommendation_score: selected?.score || null,
           evidence_snapshot: selected?.evidence || null,
+          swing_movement_id: movementSuggestion.movement?.id || null,
+          swing_movement_source: movementSuggestion.movement ? "vector_engine" : null,
+          swing_movement_rationale: movementSuggestion.rationale,
           instructions:
             selected?.item.purpose || "Coach to assign an approved drill.",
           success_criterion:
@@ -288,26 +308,29 @@ export default function SessionsPage() {
             "Record the agreed success measure before progressing.",
         });
       if (i < vectorSplit.length && vectorSplit[i] > 0) {
-        const v = recommendationForSession(suggestions.vector, week.week_number, i);
-        blocks.push({
+        const workout = buildVectorWorkout({
+          recommended: suggestions.vector,
+          library,
+          phase: week.phase,
+          facilities: intake?.facilities || [],
+          totalMinutes: vectorSplit[i],
+          workoutIndex: (week.week_number - 1) * 2 + i,
+        });
+        workout.forEach((v, workoutIndex) => blocks.push({
           session_id: session.id,
-          sequence: 2,
+          sequence: 2 + workoutIndex,
           domain: "vector",
           stage: "vector",
-          minutes: vectorSplit[i],
-          library_item_id: v?.item.id || null,
-          source_case_id: v?.sourceCaseId || null,
-          recommendation_source: v?.sourceCaseId ? "coach_approved" : "vector_engine",
-          recommendation_rationale: v?.rationale || null,
-          recommendation_score: v?.score || null,
-          evidence_snapshot: v?.evidence || null,
-          instructions:
-            v?.item.purpose ||
-            "Assign Vector support only after a demonstrated movement requirement.",
-          success_criterion:
-            v?.item.pass_criterion ||
-            "Movement quality retained without unnecessary fatigue.",
-        });
+          minutes: v.minutes,
+          library_item_id: v.item.id,
+          source_case_id: v.sourceCaseId,
+          recommendation_source: v.sourceCaseId ? "coach_approved" : "vector_engine",
+          recommendation_rationale: v.rationale,
+          recommendation_score: v.score,
+          evidence_snapshot: v.evidence,
+          instructions: `${v.role[0].toUpperCase()}${v.role.slice(1)} component · ${v.item.purpose}`,
+          success_criterion: v.item.pass_criterion || "Movement quality retained without unnecessary fatigue.",
+        }));
       }
     });
     const { error: blockError } = await sb
@@ -317,8 +340,8 @@ export default function SessionsPage() {
       blockError
         ? blockError.message
         : suggestions.requiresReview
-          ? "Suggested week built. Review the Vector exercise against the player's recovery constraints before release."
-          : "Vector built the suggested week from the player's ranked evidence. Review or change any item before release.",
+          ? "Suggested week built. Review every exercise and P-position movement against the player's evidence and recovery constraints before release."
+          : "Vector built the suggested week with a drill, P-position movement aid and balanced multi-exercise workouts. Review or change any item before release.",
     );
     await loadSessions();
   };
@@ -530,6 +553,9 @@ export default function SessionsPage() {
                             const item = library.find(
                               (x) => x.id === e.target.value,
                             );
+                            const movementSuggestion = block.domain === "golf"
+                              ? suggestSwingMovement(item, swingMovements)
+                              : null;
                             void updateBlock(block.id, {
                               library_item_id: e.target.value || null,
                               instructions: item?.purpose || null,
@@ -541,6 +567,11 @@ export default function SessionsPage() {
                                 : "Player selected an alternative player-ready item.",
                               recommendation_score: null,
                               evidence_snapshot: null,
+                              ...(block.domain === "golf" ? {
+                                swing_movement_id: movementSuggestion?.movement?.id || null,
+                                swing_movement_source: movementSuggestion?.movement ? "vector_engine" : null,
+                                swing_movement_rationale: movementSuggestion?.rationale || null,
+                              } : {}),
                             });
                           }}
                         >
@@ -563,6 +594,52 @@ export default function SessionsPage() {
                       )}
                       {block.success_criterion && (
                         <small>Success: {block.success_criterion}</small>
+                      )}
+                      {block.domain === "golf" && (
+                        <section className="swing-movement-aid">
+                          <label>
+                            Swing movement aid
+                            {canPlan ? (
+                              <select
+                                value={block.swing_movement_id || ""}
+                                onChange={(e) => {
+                                  const movement = swingMovements.find((item) => item.id === e.target.value);
+                                  void updateBlock(block.id, {
+                                    swing_movement_id: movement?.id || null,
+                                    swing_movement_source: canCoach ? "coach_override" : "player_override",
+                                    swing_movement_rationale: movement
+                                      ? `${canCoach ? "Coach" : "Player"} selected ${movement.p_position} · ${movement.title} after reviewing Vector's suggestion.`
+                                      : `${canCoach ? "Coach" : "Player"} removed the swing movement aid.`,
+                                  });
+                                }}
+                              >
+                                <option value="">No P-system movement</option>
+                                {swingMovements.map((movement) => (
+                                  <option key={movement.id} value={movement.id}>
+                                    {movement.p_position} · {movement.title}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <b>{block.swing_movements ? `${block.swing_movements.p_position} · ${block.swing_movements.title}` : "No movement assigned"}</b>
+                            )}
+                          </label>
+                          {block.swing_movement_rationale && <p>{block.swing_movement_rationale}</p>}
+                          {block.swing_movements && (
+                            <details>
+                              <summary>Review precise movement positions</summary>
+                              <dl>
+                                <div><dt>Body</dt><dd>{block.swing_movements.body_target}</dd></div>
+                                <div><dt>Pressure</dt><dd>{block.swing_movements.pressure_target}</dd></div>
+                                <div><dt>Hands and arms</dt><dd>{block.swing_movements.hands_arms_target}</dd></div>
+                                <div><dt>Shaft and face</dt><dd>{block.swing_movements.shaft_face_target}</dd></div>
+                                <div><dt>Avoid</dt><dd>{block.swing_movements.incorrect_patterns}</dd></div>
+                                <div><dt>Rehearsal</dt><dd>{block.swing_movements.rehearsal}</dd></div>
+                                <div><dt>Acceptance gate</dt><dd>{block.swing_movements.acceptance_gate}</dd></div>
+                              </dl>
+                            </details>
+                          )}
+                        </section>
                       )}
                     </div>
                     {canPlan ? (
