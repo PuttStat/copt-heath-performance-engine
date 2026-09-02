@@ -56,7 +56,7 @@ const phaseCodePreference: Record<PlanningPhase, number[]> = {
 
 const lower = (value: string | null | undefined) => (value || "").toLowerCase();
 
-function equipmentAvailable(item: RecommendationLibraryItem, facilities: string[]) {
+export function equipmentAvailable(item: RecommendationLibraryItem, facilities: string[]) {
   if (!facilities.length || !item.equipment) return true;
   const equipment = lower(item.equipment), available = facilities.map(lower);
   const has = (value: string) => available.some((entry) => entry.includes(value));
@@ -166,4 +166,78 @@ export function splitMinutes(total: number, count: number) {
     { length: safeCount },
     (_, index) => Math.floor(total / safeCount) + (index < total % safeCount ? 1 : 0),
   );
+}
+
+export type WorkoutRecommendation = PlanRecommendation & {
+  role: "power" | "strength" | "support" | "conditioning";
+  minutes: number;
+};
+
+function workoutRole(item: RecommendationLibraryItem): WorkoutRecommendation["role"] {
+  const text = lower(`${item.code} ${item.category} ${item.title}`);
+  if (/condition|cardio|aerobic|bike|walk|treadmill|interval/.test(text)) return "conditioning";
+  if (/power|speed|jump|throw|sprint/.test(text)) return "power";
+  if (/row|press|carry|rotation|anti-|mobility|shoulder|trunk/.test(text)) return "support";
+  return "strength";
+}
+
+function weightedWorkoutMinutes(total: number, count: number) {
+  if (count <= 1) return [total];
+  const conditioning = Math.max(1, Math.min(total - count + 1, Math.round(total * 0.4)));
+  const rest = Math.max(0, total - conditioning);
+  return [...splitMinutes(rest, count - 1), conditioning];
+}
+
+export function buildVectorWorkout({
+  recommended,
+  library,
+  phase,
+  facilities = [],
+  totalMinutes,
+  workoutIndex = 0,
+}: {
+  recommended: PlanRecommendation[];
+  library: RecommendationLibraryItem[];
+  phase: PlanningPhase;
+  facilities?: string[];
+  totalMinutes: number;
+  workoutIndex?: number;
+}): WorkoutRecommendation[] {
+  if (totalMinutes <= 0) return [];
+  const target = totalMinutes < 20 ? 2 : totalMinutes < 40 ? 3 : totalMinutes < 60 ? 4 : 5;
+  const suitable = library.filter(
+    (item) => item.item_type === "vector_exercise" && item.instruction_complete && equipmentAvailable(item, facilities),
+  );
+  const desired = Math.min(target, totalMinutes, suitable.length);
+  if (!desired) return [];
+  const recommendedById = new Map(recommended.map((entry) => [entry.item.id, entry]));
+  const roleOrder: WorkoutRecommendation["role"][] =
+    phase === "Transfer" || phase === "Perform"
+      ? ["power", "strength", "support", "strength", "conditioning"]
+      : ["strength", "support", "power", "strength", "conditioning"];
+  const selected: RecommendationLibraryItem[] = [];
+  const unused = () => suitable.filter((item) => !selected.some((chosen) => chosen.id === item.id));
+  for (const role of roleOrder.slice(0, desired - 1)) {
+    const candidates = unused().filter((item) => workoutRole(item) === role);
+    const pool = candidates.length ? candidates : unused().filter((item) => workoutRole(item) !== "conditioning");
+    if (pool.length) selected.push(pool[(workoutIndex + selected.length) % pool.length]);
+  }
+  const conditioning = unused().filter((item) => workoutRole(item) === "conditioning");
+  if (conditioning.length) selected.push(conditioning[workoutIndex % conditioning.length]);
+  while (selected.length < desired && unused().length) selected.push(unused()[0]);
+  const minutes = weightedWorkoutMinutes(totalMinutes, selected.length);
+  return selected.map((item, index) => {
+    const prior = recommendedById.get(item.id);
+    const role = workoutRole(item);
+    return {
+      item,
+      sourceCaseId: prior?.sourceCaseId || null,
+      score: prior?.score || 100 - index,
+      rationale: prior?.rationale || `Vector selected this as the ${role} component of a balanced ${phase.toLowerCase()}-phase workout.`,
+      evidence: prior?.evidence || null,
+      requiresReview: prior?.requiresReview || false,
+      role,
+      minutes: minutes[index],
+    };
+  });
 }
