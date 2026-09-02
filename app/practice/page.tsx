@@ -19,6 +19,18 @@ type Item = {
   regression: string | null;
   instruction_complete: boolean;
 };
+type Movement = {
+  code: string;
+  p_position: string;
+  title: string;
+  body_target: string;
+  pressure_target: string;
+  hands_arms_target: string;
+  shaft_face_target: string;
+  incorrect_patterns: string;
+  rehearsal: string;
+  acceptance_gate: string;
+};
 type Block = {
   id: string;
   sequence: number;
@@ -26,6 +38,8 @@ type Block = {
   stage: string;
   minutes: number;
   instructions: string | null;
+  swing_movement_rationale: string | null;
+  swing_movements: Movement | null;
   library_items: Item | null;
 };
 type Review = {
@@ -144,7 +158,7 @@ export default function PracticePage() {
     const { data, error } = await sb
       .from("programme_sessions")
       .select(
-        "id,session_number,title,scheduled_day,objective,session_blocks(id,sequence,domain,stage,minutes,instructions,library_items(code,title,purpose,setup,instructions,intention,dosage,pass_criterion,equipment,progression,regression,instruction_complete)),session_logs!left(id,readiness,energy,soreness,stress,pain_level,pain_location,state,safety_status,completion_status,actual_minutes,session_rpe,session_load,player_notes,block_completions(id,session_block_id,completed))",
+        "id,session_number,title,scheduled_day,objective,session_blocks(id,sequence,domain,stage,minutes,instructions,swing_movement_rationale,swing_movements(code,p_position,title,body_target,pressure_target,hands_arms_target,shaft_face_target,incorrect_patterns,rehearsal,acceptance_gate),library_items(code,title,purpose,setup,instructions,intention,dosage,pass_criterion,equipment,progression,regression,instruction_complete)),session_logs!left(id,readiness,energy,soreness,stress,pain_level,pain_location,state,safety_status,completion_status,actual_minutes,session_rpe,session_load,player_notes,block_completions(id,session_block_id,completed))",
       )
       .eq("programme_week_id", weekId)
       .eq("session_logs.player_id", targetId)
@@ -542,6 +556,21 @@ export default function PracticePage() {
                               </details>
                             ) : (
                               <p className="instruction-pending">Full instructions are being prepared by your coach.</p>
+                            )}
+                            {block.swing_movements && (
+                              <details className="player-block-instructions swing-movement-delivery" open>
+                                <summary>{block.swing_movements.p_position} swing movement · {block.swing_movements.title}</summary>
+                                {block.swing_movement_rationale && <p>{block.swing_movement_rationale}</p>}
+                                <dl>
+                                  <div><dt>Body</dt><dd>{block.swing_movements.body_target}</dd></div>
+                                  <div><dt>Pressure</dt><dd>{block.swing_movements.pressure_target}</dd></div>
+                                  <div><dt>Hands and arms</dt><dd>{block.swing_movements.hands_arms_target}</dd></div>
+                                  <div><dt>Shaft and face</dt><dd>{block.swing_movements.shaft_face_target}</dd></div>
+                                  <div><dt>Avoid</dt><dd>{block.swing_movements.incorrect_patterns}</dd></div>
+                                  <div><dt>Rehearsal</dt><dd>{block.swing_movements.rehearsal}</dd></div>
+                                  <div><dt>Acceptance gate</dt><dd>{block.swing_movements.acceptance_gate}</dd></div>
+                                </dl>
+                              </details>
                             )}
                           </div>
                           {!canCoach && (
