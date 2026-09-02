@@ -219,6 +219,8 @@
   font-size: 9px;
   cursor: pointer;
 }
+.swing-movement-delivery { margin-top: 12px; border-color: #d7cdaF; background: #f7f2e7; }
+.swing-movement-delivery > p { color: var(--ink); line-height: 1.5; }
 .finish-form,
 .coach-response {
   display: grid;
