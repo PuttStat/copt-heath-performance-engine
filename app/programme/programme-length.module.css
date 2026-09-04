@@ -23,12 +23,207 @@
 }
 
 @media (max-width: 950px) {
-  :global(.programme-summary) { grid-template-columns: repeat(3, 1fr); }
-  :global(.programme-summary) button { grid-column: 1 / -1; }
+  :global(.programme-summary) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  :global(.programme-summary) button {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 800px) {
-  .lengthPicker { font-size: 13px; }
-  .lengthPicker select { font-size: 16px; }
-  :global(.programme-summary) { grid-template-columns: 1fr 1fr; }
+  .lengthPicker {
+    font-size: 13px;
+  }
+  .lengthPicker select {
+    font-size: 16px;
+  }
+  :global(.programme-summary) {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.managementBar {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 14px;
+  align-items: center;
+  margin: -4px 0 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.managementBar div {
+  display: grid;
+  gap: 4px;
+}
+.managementBar div > span {
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.managementBar div > strong {
+  font-size: 14px;
+}
+.managementBar div > small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.deleteButton {
+  min-height: 50px;
+  border: 1px solid #a23d2d;
+  background: transparent;
+  color: #8d3227;
+  padding: 0 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.history {
+  margin-top: 22px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.history > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  padding: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.history h2 {
+  margin: 0;
+  font:
+    500 25px Georgia,
+    serif;
+}
+.history > header > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.history article {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: center;
+  min-height: 70px;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.history article:last-child {
+  border-bottom: 0;
+}
+.history article div {
+  display: grid;
+  gap: 5px;
+}
+.history article strong {
+  font-size: 14px;
+}
+.history article span {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+.history article button {
+  min-width: 74px;
+  min-height: 42px;
+  border: 1px solid #bc7167;
+  background: transparent;
+  color: #8d3227;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.confirmScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(8, 24, 20, 0.62);
+  backdrop-filter: blur(4px);
+}
+.confirmDialog {
+  width: min(500px, 100%);
+  padding: 30px;
+  border-top: 5px solid #a23d2d;
+  background: var(--paper);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+.confirmDialog h2 {
+  margin: 0;
+  font:
+    500 31px Georgia,
+    serif;
+}
+.confirmDialog > p:not(:first-child) {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.confirmDialog > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+.confirmDialog button {
+  min-height: 48px;
+  padding: 0 17px;
+  border: 1px solid var(--line);
+  background: transparent;
+  font-weight: 800;
+  cursor: pointer;
+}
+.confirmDialog .confirmDelete {
+  border-color: #a23d2d;
+  background: #a23d2d;
+  color: white;
+}
+
+@media (max-width: 800px) {
+  .managementBar {
+    grid-template-columns: 1fr;
+    padding: 18px 16px;
+  }
+  .managementBar button {
+    width: 100%;
+  }
+  .history {
+    margin-inline: -15px;
+    border-left: 0;
+    border-right: 0;
+  }
+  .history > header,
+  .history article {
+    padding-inline: 16px;
+  }
+  .history article {
+    min-height: 76px;
+  }
+  .history article span {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .confirmScrim {
+    align-items: end;
+    padding: 0;
+  }
+  .confirmDialog {
+    width: 100%;
+    padding: 25px 20px calc(22px + env(safe-area-inset-bottom));
+  }
+  .confirmDialog > div {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .confirmDialog button {
+    width: 100%;
+  }
 }

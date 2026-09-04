@@ -47,6 +47,7 @@ type Programme = {
   golf_minutes_per_week: number;
   vector_minutes_per_week: number;
   current_week: number;
+  created_at: string;
 };
 type Week = {
   id: string;
@@ -103,8 +104,10 @@ export default function ProgrammePage() {
     [selectedId, setSelectedId] = useState(""),
     [intake, setIntake] = useState<Intake | null>(null),
     [programme, setProgramme] = useState<Programme | null>(null),
+    [programmeHistory, setProgrammeHistory] = useState<Programme[]>([]),
     [weeks, setWeeks] = useState<Week[]>([]),
     [programmeLength, setProgrammeLength] = useState<ProgrammeLength>(12),
+    [deleteTarget, setDeleteTarget] = useState<Programme | null>(null),
     [hasCoach, setHasCoach] = useState(false),
     [message, setMessage] = useState("");
   const canCoach = profile?.role === "coach" || profile?.role === "admin";
@@ -137,31 +140,43 @@ export default function ProgrammePage() {
   const loadProgramme = useCallback(async () => {
     const sb = getSupabaseBrowserClient();
     if (!sb || !targetId) return;
-    const [intakeResult, programmeResult, linkResult] = await Promise.all([
-      sb
-        .from("programme_intakes")
-        .select("*")
-        .eq("player_id", targetId)
-        .maybeSingle(),
-      sb
-        .from("programmes")
-        .select("*")
-        .eq("player_id", targetId)
-        .in("status", ["draft", "published", "completed"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      canCoach
-        ? Promise.resolve({ data: [] })
-        : sb
-            .from("coach_player_links")
-            .select("coach_id")
-            .eq("player_id", targetId),
-    ]);
+    const [intakeResult, programmeResult, linkResult, historyResult] =
+      await Promise.all([
+        sb
+          .from("programme_intakes")
+          .select("*")
+          .eq("player_id", targetId)
+          .maybeSingle(),
+        sb
+          .from("programmes")
+          .select("*")
+          .eq("player_id", targetId)
+          .in(
+            "status",
+            canCoach ? ["draft", "published"] : ["published", "completed"],
+          )
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        canCoach
+          ? Promise.resolve({ data: [] })
+          : sb
+              .from("coach_player_links")
+              .select("coach_id")
+              .eq("player_id", targetId),
+        canCoach
+          ? sb
+              .from("programmes")
+              .select("*")
+              .eq("player_id", targetId)
+              .order("created_at", { ascending: false })
+          : Promise.resolve({ data: [] }),
+      ]);
     setHasCoach(!canCoach && !!linkResult.data?.length);
     setIntake((intakeResult.data as Intake | null) || blankIntake(targetId));
     const found = programmeResult.data as Programme | null;
     setProgramme(found);
+    setProgrammeHistory((historyResult.data || []) as Programme[]);
     if (found) {
       const { data } = await sb
         .from("programme_weeks")
@@ -516,6 +531,37 @@ export default function ProgrammePage() {
     setMessage(error ? error.message : "Week updated.");
     if (!error) await loadProgramme();
   };
+  const startNewProgramme = async () => {
+    const sb = getSupabaseBrowserClient();
+    if (!sb || !canCoach || !programme) return;
+    const { error } = await sb
+      .from("programmes")
+      .update({ status: "archived", updated_at: new Date().toISOString() })
+      .eq("id", programme.id);
+    setMessage(
+      error
+        ? error.message
+        : "Previous programme archived. Choose the length of the new programme.",
+    );
+    if (!error) await loadProgramme();
+  };
+  const deleteProgramme = async () => {
+    const sb = getSupabaseBrowserClient();
+    if (!sb || !canCoach || !deleteTarget) return;
+    const { error } = await sb
+      .from("programmes")
+      .delete()
+      .eq("id", deleteTarget.id);
+    setMessage(
+      error
+        ? error.message
+        : `${deleteTarget.title} and its associated programme records were permanently deleted.`,
+    );
+    if (!error) {
+      setDeleteTarget(null);
+      await loadProgramme();
+    }
+  };
   const totalGolf = useMemo(
       () => weeks.reduce((sum, week) => sum + week.golf_minutes, 0),
       [weeks],
@@ -824,6 +870,27 @@ export default function ProgrammePage() {
               </button>
             )}
           </section>
+          {canCoach && (
+            <section className={styles.managementBar}>
+              <div>
+                <span>Programme management</span>
+                <strong>Ready to begin a new coaching cycle?</strong>
+                <small>
+                  Starting a new programme archives this one and keeps its
+                  records in programme history.
+                </small>
+              </div>
+              <button className="secondary-action" onClick={startNewProgramme}>
+                Start new programme
+              </button>
+              <button
+                className={styles.deleteButton}
+                onClick={() => setDeleteTarget(programme)}
+              >
+                Delete programme
+              </button>
+            </section>
+          )}
           <section className="programme-timeline">
             {weeks.map((week) => (
               <article
@@ -942,10 +1009,72 @@ export default function ProgrammePage() {
           </section>
         </>
       )}
+      {canCoach && targetId && programmeHistory.length > 0 && (
+        <section className={styles.history}>
+          <header>
+            <div>
+              <p className="eyebrow">Programme history</p>
+              <h2>Previous coaching cycles</h2>
+            </div>
+            <span>{programmeHistory.length} programmes</span>
+          </header>
+          <div>
+            {programmeHistory.map((item) => (
+              <article key={item.id}>
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>
+                    Started{" "}
+                    {new Date(item.start_date + "T12:00:00").toLocaleDateString(
+                      "en-GB",
+                    )}{" "}
+                    · {item.status}
+                    {item.id === programme?.id ? " · current" : ""}
+                  </span>
+                </div>
+                <button onClick={() => setDeleteTarget(item)}>Delete</button>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
       {!targetId && (
         <div className="empty-state compact">
           <h2>Select a linked player</h2>
           <p>Choose a player to build or edit their programme.</p>
+        </div>
+      )}
+      {deleteTarget && (
+        <div
+          className={styles.confirmScrim}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDeleteTarget(null);
+          }}
+        >
+          <section
+            className={styles.confirmDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-programme-title"
+          >
+            <p className="eyebrow">Permanent deletion</p>
+            <h2 id="delete-programme-title">Delete this programme?</h2>
+            <p>
+              <strong>{deleteTarget.title}</strong> and all of its programme
+              weeks, sessions, completion records, reviews and retests will be
+              permanently removed. Round and TrackMan performance data will not
+              be deleted.
+            </p>
+            <div>
+              <button onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button
+                className={styles.confirmDelete}
+                onClick={deleteProgramme}
+              >
+                Permanently delete
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </AppShell>
