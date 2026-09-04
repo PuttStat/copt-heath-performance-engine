@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildVectorWorkout,
+  buildGolfPracticeSequence,
   recommendPlanItems,
   recommendationForSession,
+  splitGolfPracticeMinutes,
   splitMinutes,
 } from "../lib/programme-recommendation.ts";
 import { suggestSwingMovement } from "../lib/swing-movement-recommendation.ts";
@@ -93,6 +95,25 @@ test("session rotation and exact minute reconciliation are deterministic", () =>
   assert.equal(recommendationForSession(recommendations, 2, 0).item.code, "B");
   assert.deepEqual(splitMinutes(181, 3), [61, 60, 60]);
   assert.equal(splitMinutes(181, 3).reduce((sum, value) => sum + value, 0), 181);
+});
+
+test("golf sessions contain two corrective drills and a final performance test", () => {
+  const recommendations = [
+    { item: { ...item("MOVE-1"), category: "Path", stage: "Movement" }, sourceCaseId: null, score: 3, rationale: "Movement one", evidence: null, requiresReview: false },
+    { item: { ...item("CONTACT-1"), category: "Path", stage: "Contact" }, sourceCaseId: null, score: 2, rationale: "Contact one", evidence: null, requiresReview: false },
+    { item: { ...item("TEST-1"), category: "Path", stage: "Performance" }, sourceCaseId: null, score: 1, rationale: "Performance one", evidence: null, requiresReview: false },
+  ];
+  const sequence = buildGolfPracticeSequence({
+    recommended: recommendations,
+    library: recommendations.map((entry) => entry.item),
+    weekNumber: 1,
+    sessionIndex: 0,
+  });
+  assert.deepEqual(sequence.map((entry) => entry.role), ["technical_1", "technical_2", "performance_test"]);
+  assert.deepEqual(sequence.map((entry) => entry.stage), ["technique", "skill", "transfer"]);
+  assert.equal(new Set(sequence.map((entry) => entry.item.id)).size, 3);
+  assert.deepEqual(splitGolfPracticeMinutes(100), [30, 30, 40]);
+  assert.equal(splitGolfPracticeMinutes(61).reduce((total, value) => total + value, 0), 61);
 });
 
 test("no evidence produces no invented prescription", () => {
