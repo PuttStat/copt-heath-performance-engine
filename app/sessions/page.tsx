@@ -422,6 +422,58 @@ export default function SessionsPage() {
     setMessage("Practice drill added. Choose the drill; Vector has kept the session's total golf minutes unchanged.");
     await loadSessions();
   };
+  const deletePracticeDrill = async (session: Session, block: Block) => {
+    const sb = getSupabaseBrowserClient();
+    if (!sb || !canCoach || block.domain !== "golf") return;
+    const remaining = session.session_blocks
+      .filter((item) => item.domain === "golf" && item.id !== block.id)
+      .sort((a, b) => a.sequence - b.sequence);
+    if (!remaining.length) {
+      setMessage("A session must retain at least one golf practice drill.");
+      return;
+    }
+    const title = block.library_items?.title || "this practice drill";
+    if (!window.confirm(`Delete ${title}? Its ${block.minutes} minutes will move to the next golf drill so the session total stays unchanged.`)) return;
+    const recipient = remaining[0];
+    const transferMovement = !!block.swing_movement_id && !recipient.swing_movement_id;
+    const recipientUpdate: Partial<Block> = {
+      minutes: recipient.minutes + block.minutes,
+      ...(transferMovement ? {
+        swing_movement_id: block.swing_movement_id,
+        swing_movement_source: block.swing_movement_source,
+        swing_movement_rationale: block.swing_movement_rationale,
+      } : {}),
+    };
+    const { error: updateError } = await sb
+      .from("session_blocks")
+      .update(recipientUpdate)
+      .eq("id", recipient.id);
+    if (updateError) {
+      setMessage(updateError.message);
+      return;
+    }
+    const { error: deleteError } = await sb
+      .from("session_blocks")
+      .delete()
+      .eq("id", block.id);
+    if (deleteError) {
+      await sb
+        .from("session_blocks")
+        .update({
+          minutes: recipient.minutes,
+          ...(transferMovement ? {
+            swing_movement_id: recipient.swing_movement_id,
+            swing_movement_source: recipient.swing_movement_source,
+            swing_movement_rationale: recipient.swing_movement_rationale,
+          } : {}),
+        })
+        .eq("id", recipient.id);
+      setMessage(deleteError.message);
+      return;
+    }
+    setMessage(`Practice drill deleted. Its ${block.minutes} minutes were moved to the next golf drill.`);
+    await loadSessions();
+  };
   const release = async () => {
     const sb = getSupabaseBrowserClient();
     if (!sb || !week || !programme) return;
@@ -702,32 +754,44 @@ export default function SessionsPage() {
                       )}
                     </div>
                     {canPlan ? (
-                      <label>
-                        Minutes
-                        <input
-                          type="number"
-                          min="1"
-                          max="300"
-                          value={block.minutes}
-                          onChange={(e) =>
-                            setSessions((all) =>
-                              all.map((s) => ({
-                                ...s,
-                                session_blocks: s.session_blocks.map((b) =>
-                                  b.id === block.id
-                                    ? { ...b, minutes: Number(e.target.value) }
-                                    : b,
-                                ),
-                              })),
-                            )
-                          }
-                          onBlur={(e) =>
-                            updateBlock(block.id, {
-                              minutes: Number(e.target.value),
-                            })
-                          }
-                        />
-                      </label>
+                      <div className="block-controls">
+                        <label>
+                          Minutes
+                          <input
+                            type="number"
+                            min="1"
+                            max="300"
+                            value={block.minutes}
+                            onChange={(e) =>
+                              setSessions((all) =>
+                                all.map((s) => ({
+                                  ...s,
+                                  session_blocks: s.session_blocks.map((b) =>
+                                    b.id === block.id
+                                      ? { ...b, minutes: Number(e.target.value) }
+                                      : b,
+                                  ),
+                                })),
+                              )
+                            }
+                            onBlur={(e) =>
+                              updateBlock(block.id, {
+                                minutes: Number(e.target.value),
+                              })
+                            }
+                          />
+                        </label>
+                        {canCoach && block.domain === "golf" && session.session_blocks.filter((item) => item.domain === "golf").length > 1 && (
+                          <button
+                            type="button"
+                            className="delete-drill"
+                            onClick={() => void deletePracticeDrill(session, block)}
+                            aria-label={`Delete ${block.library_items?.title || "practice drill"}`}
+                          >
+                            Delete drill
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <strong>{block.minutes} min</strong>
                     )}
