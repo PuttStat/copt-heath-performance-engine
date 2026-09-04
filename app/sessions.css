@@ -152,6 +152,29 @@
   background: var(--paper);
   border: 1px solid var(--line);
 }
+.session-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  background: #f4f7f3;
+  border-top: 1px solid var(--line);
+}
+.session-actions button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--green);
+  background: white;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.session-actions span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
 .planned-session > header {
   display: grid;
   grid-template-columns: 100px 1fr 180px;
@@ -366,5 +389,17 @@
   .swing-movement-aid dl div {
     grid-template-columns: 1fr;
     gap: 3px;
+  }
+  .session-actions {
+    display: grid;
+    padding: 16px;
+  }
+  .session-actions button {
+    width: 100%;
+    min-height: 50px;
+    font-size: 15px;
+  }
+  .session-actions span {
+    font-size: 13px;
   }
 }
