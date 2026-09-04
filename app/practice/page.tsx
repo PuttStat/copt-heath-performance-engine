@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "../ui/app-shell";
 import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 import { usePlayerData } from "../../lib/use-player-data";
+import { InstructionVideo } from "../../src/components/library/InstructionVideo";
 type Player = { id: string; display_name: string | null; email: string };
 type Week = { id: string; week_number: number; phase: string; focus: string };
 type Item = {
@@ -17,6 +18,7 @@ type Item = {
   equipment: string | null;
   progression: string | null;
   regression: string | null;
+  media_url: string | null;
   instruction_complete: boolean;
 };
 type Movement = {
@@ -158,7 +160,7 @@ export default function PracticePage() {
     const { data, error } = await sb
       .from("programme_sessions")
       .select(
-        "id,session_number,title,scheduled_day,objective,session_blocks(id,sequence,domain,stage,minutes,instructions,swing_movement_rationale,swing_movements(code,p_position,title,body_target,pressure_target,hands_arms_target,shaft_face_target,incorrect_patterns,rehearsal,acceptance_gate),library_items(code,title,purpose,setup,instructions,intention,dosage,pass_criterion,equipment,progression,regression,instruction_complete)),session_logs!left(id,readiness,energy,soreness,stress,pain_level,pain_location,state,safety_status,completion_status,actual_minutes,session_rpe,session_load,player_notes,block_completions(id,session_block_id,completed))",
+        "id,session_number,title,scheduled_day,objective,session_blocks(id,sequence,domain,stage,minutes,instructions,swing_movement_rationale,swing_movements(code,p_position,title,body_target,pressure_target,hands_arms_target,shaft_face_target,incorrect_patterns,rehearsal,acceptance_gate),library_items(code,title,purpose,setup,instructions,intention,dosage,pass_criterion,equipment,progression,regression,media_url,instruction_complete)),session_logs!left(id,readiness,energy,soreness,stress,pain_level,pain_location,state,safety_status,completion_status,actual_minutes,session_rpe,session_load,player_notes,block_completions(id,session_block_id,completed))",
       )
       .eq("programme_week_id", weekId)
       .eq("session_logs.player_id", targetId)
@@ -540,6 +542,8 @@ export default function PracticePage() {
                               </p>
                             )}
                             {block.library_items?.instruction_complete ? (
+                              <>
+                              {block.library_items.media_url && <InstructionVideo url={block.library_items.media_url} title={block.library_items.title} />}
                               <details className="player-block-instructions" open>
                                 <summary>How to perform this {block.domain === "vector" ? "movement" : "drill"}</summary>
                                 <dl>
@@ -554,6 +558,7 @@ export default function PracticePage() {
                                   {block.library_items.regression && <div><dt>Regression</dt><dd>{block.library_items.regression}</dd></div>}
                                 </dl>
                               </details>
+                              </>
                             ) : (
                               <p className="instruction-pending">Full instructions are being prepared by your coach.</p>
                             )}

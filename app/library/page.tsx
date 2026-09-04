@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "../ui/app-shell";
 import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 import { usePlayerData } from "../../lib/use-player-data";
+import { InstructionVideo, parseInstructionVideo } from "../../src/components/library/InstructionVideo";
 
 type Item = {
   id: string;
   code: string;
-  item_type: "golf_drill" | "vector_exercise";
+  item_type: "golf_drill" | "vector_exercise" | "swing_movement";
   title: string;
   category: string;
   stage: string | null;
@@ -24,6 +25,7 @@ type Item = {
   status: "draft" | "approved" | "retired";
   version: number;
   source_reference: string;
+  media_url: string | null;
   instruction_complete: boolean;
 };
 type Editable = Omit<Item, "id" | "version" | "instruction_complete">;
@@ -43,6 +45,7 @@ const blank: Editable = {
   progression: "",
   regression: "",
   source_reference: "Coach library",
+  media_url: "",
   status: "draft",
 };
 const fields: Array<[keyof Editable, string, "input" | "textarea"]> = [
@@ -73,7 +76,7 @@ export default function LibraryPage() {
     const { data, error } = await sb
       .from("library_items")
       .select(
-        "id,code,item_type,title,category,stage,purpose,setup,instructions,intention,dosage,pass_criterion,equipment,progression,regression,status,version,source_reference,instruction_complete",
+        "id,code,item_type,title,category,stage,purpose,setup,instructions,intention,dosage,pass_criterion,equipment,progression,regression,status,version,source_reference,media_url,instruction_complete",
       )
       .order("code");
     if (error) setMessage(error.message);
@@ -112,6 +115,7 @@ export default function LibraryPage() {
       progression: item.progression || "",
       regression: item.regression || "",
       source_reference: item.source_reference,
+      media_url: item.media_url || "",
       status: item.status,
     });
   };
@@ -119,10 +123,16 @@ export default function LibraryPage() {
     e.preventDefault();
     const sb = getSupabaseBrowserClient();
     if (!sb || !canEdit) return;
-    const { error } = await sb
+    if (form.media_url && !parseInstructionVideo(form.media_url)) {
+      setMessage("Use a valid YouTube or Vimeo video link.");
+      return;
+    }
+    const { data, error } = await sb
       .from("library_items")
-      .insert({ ...form, created_by: profile?.id });
-    setMessage(error ? error.message : "Library item saved as draft.");
+      .insert({ ...form, code: null, media_url: form.media_url || null, created_by: profile?.id })
+      .select("code")
+      .single();
+    setMessage(error ? error.message : `${data?.code || "Library item"} created and saved as a draft.`);
     if (!error) {
       setForm(blank);
       await load();
@@ -131,9 +141,13 @@ export default function LibraryPage() {
   const saveEdit = async () => {
     const sb = getSupabaseBrowserClient();
     if (!sb || !canEdit || !editingId) return;
+    if (edit.media_url && !parseInstructionVideo(edit.media_url)) {
+      setMessage("Use a valid YouTube or Vimeo video link.");
+      return;
+    }
     const { error } = await sb
       .from("library_items")
-      .update(edit)
+      .update({ ...edit, media_url: edit.media_url || null })
       .eq("id", editingId);
     setMessage(
       error
@@ -214,6 +228,7 @@ export default function LibraryPage() {
           <option value="all">All content</option>
           <option value="golf_drill">Golf drills</option>
           <option value="vector_exercise">Vector exercises</option>
+          <option value="swing_movement">Swing movements</option>
         </select>
       </section>
       {message && (
@@ -247,11 +262,14 @@ export default function LibraryPage() {
                 <p className="eyebrow">
                   {item.item_type === "golf_drill"
                     ? "Golf drill"
-                    : "Vector exercise"}{" "}
+                    : item.item_type === "vector_exercise"
+                      ? "Vector exercise"
+                      : "Swing movement"}{" "}
                   · {item.category}
                 </p>
                 <h2>{item.title}</h2>
                 <p>{item.purpose}</p>
+                {item.media_url && <InstructionVideo url={item.media_url} title={item.title} />}
                 {editingId !== item.id && (
                   <details className="library-instructions">
                     <summary>View instructions</summary>
@@ -296,6 +314,10 @@ export default function LibraryPage() {
                 {editingId === item.id && (
                   <div className="inline-editor">
                     {instructionFields(edit, setEdit)}
+                    <label>
+                      YouTube or Vimeo link
+                      <input type="url" value={edit.media_url || ""} onChange={(e) => setEdit({ ...edit, media_url: e.target.value })} />
+                    </label>
                     <label>
                       Status
                       <select
@@ -347,14 +369,7 @@ export default function LibraryPage() {
               is calculated automatically.
             </p>
             <form onSubmit={saveNew}>
-              <label>
-                Code
-                <input
-                  required
-                  value={form.code}
-                  onChange={(e) => setForm({ ...form, code: e.target.value })}
-                />
-              </label>
+              <div className="generated-code-note"><strong>Code generated automatically</strong><span>Vector assigns the next code when this draft is saved.</span></div>
               <label>
                 Title
                 <input
@@ -393,9 +408,14 @@ export default function LibraryPage() {
                 >
                   <option value="golf_drill">Golf drill</option>
                   <option value="vector_exercise">Vector exercise</option>
+                  <option value="swing_movement">Swing movement</option>
                 </select>
               </label>
               {instructionFields(form, setForm)}
+              <label>
+                YouTube or Vimeo link
+                <input type="url" placeholder="https://vimeo.com/…" value={form.media_url || ""} onChange={(e) => setForm({ ...form, media_url: e.target.value })} />
+              </label>
               <label>
                 Source reference
                 <input

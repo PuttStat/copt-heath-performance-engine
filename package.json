@@ -11,18 +11,15 @@
     "build": "next build",
     "start": "next start",
     "test": "npm run build",
-    "test:video": "node --experimental-strip-types --test tests/video-analysis.test.mjs tests/video-api.test.mjs",
     "test:programme": "node --experimental-strip-types --test tests/programme-recommendation.test.mjs",
+    "test:mapping": "node --experimental-strip-types --test tests/course-mapping.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern worker --ignore-pattern build --ignore-pattern examples --ignore-pattern db",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
   },
   "dependencies": {
-    "@mux/mux-node": "^15.0.0",
-    "@mux/upchunk": "^3.5.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "drizzle-orm": "0.45.2",
-    "hls.js": "1.6.16",
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6"

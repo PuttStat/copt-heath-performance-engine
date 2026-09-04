@@ -7,7 +7,7 @@ import { usePlayerData, type BandAggregate } from "../../lib/use-player-data";
 import { buildDiagnosticObservations, type MissAggregate } from "../../lib/diagnostic-engine";
 
 type Player = { id: string; display_name: string | null; email: string };
-type LibraryItem = { id: string; code: string; title: string; item_type: "golf_drill" | "vector_exercise"; purpose: string; dosage: string | null };
+type LibraryItem = { id: string; code: string; title: string; item_type: "golf_drill" | "vector_exercise" | "swing_movement"; purpose: string; dosage: string | null };
 type Recommendation = { id: string; sequence: number; recommendation_role: "test" | "practice" | "physical_support"; rationale: string; library_item_id: string; library_items: LibraryItem | null };
 type Case = { id: string; shot_band: string; status: "draft" | "approved" | "rejected" | "superseded"; confidence: string; observation: string; evidence_summary: string; next_test: string; coach_note: string | null; case_recommendations: Recommendation[] };
 
