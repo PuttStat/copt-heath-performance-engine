@@ -341,11 +341,10 @@ export default function PracticePage() {
     <AppShell active="practice">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">Package 7F.3 · Delivery &amp; feedback</p>
-          <h1>Train, record, adjust.</h1>
+          <p className="eyebrow">{canCoach ? "Player practice review" : "Your current practice plan"}</p>
+          <h1>{canCoach ? "Review and adjust." : "Ready when you are."}</h1>
           <p>
-            Complete the assigned work, record readiness and session load, and
-            let repeated evidence—not one unusual day—guide the next decision.
+            {canCoach ? "Review completed work, readiness and session load before changing the next recommendation." : "Choose this week and your next session. Each drill includes its setup, instructions, success check and video when available."}
           </p>
         </div>
       </header>
