@@ -307,11 +307,29 @@
   .delivery-player select {
     width: 100%;
   }
+  .delivery-weeks{margin-inline:-15px;border-left:0;border-right:0;padding-left:15px;scroll-snap-type:x proximity}
+  .delivery-weeks button{min-width:100px;min-height:52px;scroll-snap-align:start;font-size:12px}
+  .delivery-weeks small{font-size:10px}
+  .delivery-list{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;margin-inline:-15px;padding:0 15px 6px}
+  .delivery-list>button{min-width:min(82vw,330px);min-height:76px;scroll-snap-align:start}
+  .delivery-list>button strong{font-size:14px}.delivery-list small{font-size:12px;line-height:1.4}.delivery-list b{font-size:10px}
+  .delivery-detail{margin-inline:-15px;padding:24px 18px;border-left:0;border-right:0}
+  .delivery-detail>header h2{font-size:30px}.delivery-detail>header>p:last-child{font-size:14px;line-height:1.5}
+  .response-state{font-size:13px;line-height:1.45}
+  .delivery-blocks article{align-items:start}
+  .delivery-blocks h3{font-size:22px}.delivery-blocks p,.delivery-blocks small{font-size:13px;line-height:1.5}
+  .delivery-blocks button{min-height:46px;padding:10px 14px;font-size:13px;font-weight:800}
+  .player-block-instructions{padding:14px;margin-top:14px}
+  .player-block-instructions summary{font-size:14px;line-height:1.4;min-height:30px}
+  .player-block-instructions dt{font-size:11px}.player-block-instructions dd{font-size:14px;line-height:1.55}
+  .coach-block-note{padding:12px;font-size:14px!important}.coach-block-note b{font-size:11px}
+  .readiness-form h3{font-size:24px}.readiness-form label{font-size:14px;min-height:46px}
+  .finish-form label,.coach-response label{font-size:13px}.finish-form input,.finish-form textarea,.coach-response select,.coach-response textarea{min-height:48px}
 }
 @media (max-width: 500px) {
-  .delivery-summary {
-    grid-template-columns: 1fr;
-  }
+  .delivery-summary{grid-template-columns:1fr 1fr;margin-inline:-15px;border-left:0;border-right:0}
+  .delivery-summary div{padding:14px 16px;border-bottom:1px solid var(--line)}
+  .delivery-summary span{font-size:10px}.delivery-summary strong{font-size:23px}
   .delivery-blocks article {
     grid-template-columns: 1fr;
   }
@@ -321,4 +339,5 @@
   .readiness-form label {
     grid-template-columns: 85px 1fr 20px;
   }
+  .finish-form>div{display:grid;grid-template-columns:1fr}.finish-form>div button{width:100%;min-height:48px}
 }
