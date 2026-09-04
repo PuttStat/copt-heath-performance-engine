@@ -10,7 +10,9 @@ import {
 } from "../../lib/diagnostic-engine";
 import {
   recommendPlanItems,
+  buildGolfPracticeSequence,
   recommendationForSession,
+  splitGolfPracticeMinutes,
   splitMinutes,
   type ApprovedPrescription,
   type RecommendationLibraryItem,
@@ -19,6 +21,10 @@ import {
   programmeTemplate,
   type ProgrammeLength,
 } from "../../lib/programme-templates";
+import {
+  suggestSwingMovement,
+  type SwingMovement,
+} from "../../lib/swing-movement-recommendation";
 import styles from "./programme-length.module.css";
 
 type Player = { id: string; display_name: string | null; email: string };
@@ -78,12 +84,10 @@ const facilities = [
   "Home equipment",
   "Launch monitor",
 ];
-const stageByPhase: Record<string, string[]> = {
-  Measure: ["baseline", "technique", "skill"],
-  Build: ["technique", "skill", "random"],
-  Stabilise: ["skill", "random", "pressure"],
-  Transfer: ["random", "pressure", "transfer"],
-  Perform: ["pressure", "transfer", "baseline"],
+const practiceRoleLabel = {
+  technical_1: "Technical correction 1",
+  technical_2: "Technical correction 2",
+  performance_test: "Performance test",
 };
 const blankIntake = (id: string): Intake => ({
   player_id: id,
@@ -265,7 +269,7 @@ export default function ProgrammePage() {
       return;
     }
 
-    const [libraryResult, resultRows, detailedRows, caseRows] =
+    const [libraryResult, resultRows, detailedRows, caseRows, movementRows] =
       await Promise.all([
         sb
           .from("library_items")
@@ -289,8 +293,14 @@ export default function ProgrammePage() {
           )
           .eq("player_id", targetId)
           .eq("status", "approved"),
+        sb
+          .from("swing_movements")
+          .select("id,code,p_position,title,body_target,pressure_target,hands_arms_target,shaft_face_target,incorrect_patterns,rehearsal,acceptance_gate,applicable_categories")
+          .eq("status", "approved")
+          .order("p_position"),
       ]);
     const library = (libraryResult.data || []) as RecommendationLibraryItem[];
+    const swingMovements = (movementRows.data || []) as SwingMovement[];
     const aggregateMap: Record<
       string,
       { shot_band: string; opportunities: number; successes: number }
@@ -357,10 +367,23 @@ export default function ProgrammePage() {
           recoveryConstraints: intake.recovery_constraints || "",
         }),
       );
+    const sessionCount = Math.min(
+      7,
+      Math.max(1, intake.sessions_per_week || 3),
+    );
     const complete = createdWeeks.every((week) => {
       const plan = plans.get(week.week_number);
       return (
         !!plan?.golf.length &&
+        Array.from({ length: sessionCount }, (_, index) =>
+          buildGolfPracticeSequence({
+            recommended: plan.golf,
+            library,
+            facilities: intake.facilities,
+            weekNumber: week.week_number,
+            sessionIndex: index,
+          }),
+        ).every((sequence) => sequence.length === 3) &&
         (week.vector_minutes === 0 || !!plan.vector.length)
       );
     });
@@ -371,10 +394,6 @@ export default function ProgrammePage() {
       await loadProgramme();
       return;
     }
-    const sessionCount = Math.min(
-      7,
-      Math.max(1, intake.sessions_per_week || 3),
-    );
     const sessionRows = createdWeeks.flatMap((week) =>
       Array.from({ length: sessionCount }, (_, index) => ({
         programme_week_id: week.id,
@@ -405,27 +424,38 @@ export default function ProgrammePage() {
       const golfSplit = splitMinutes(week.golf_minutes, sessionCount),
         vectorCount = Math.min(2, sessionCount),
         vectorSplit = splitMinutes(week.vector_minutes, vectorCount);
-      const golf = recommendationForSession(plan.golf, week.week_number, index);
-      if (golfSplit[index] > 0)
+      const golf = buildGolfPracticeSequence({
+        recommended: plan.golf,
+        library,
+        facilities: intake.facilities,
+        weekNumber: week.week_number,
+        sessionIndex: index,
+      });
+      const practiceMinutes = splitGolfPracticeMinutes(golfSplit[index]);
+      const movementSuggestion = suggestSwingMovement(golf[0]?.item, swingMovements);
+      golf.forEach((drill, drillIndex) => {
+        if (practiceMinutes[drillIndex] <= 0) return;
         blocks.push({
           session_id: session.id,
-          sequence: 1,
+          sequence: drillIndex + 1,
           domain: "golf",
-          stage: (stageByPhase[week.phase] || ["skill"])[
-            index % (stageByPhase[week.phase] || ["skill"]).length
-          ],
-          minutes: golfSplit[index],
-          library_item_id: golf?.item.id,
-          source_case_id: golf?.sourceCaseId || null,
-          instructions: golf?.item.purpose,
-          success_criterion: golf?.item.pass_criterion,
-          recommendation_source: golf?.sourceCaseId
+          stage: drill.stage,
+          minutes: practiceMinutes[drillIndex],
+          library_item_id: drill.item.id,
+          source_case_id: drill.sourceCaseId || null,
+          instructions: `${practiceRoleLabel[drill.role]} · ${drill.allocationPercent}% of practice balls (${drill.allocationPercent} of a 100-ball bucket). ${drill.item.purpose}`,
+          success_criterion: drill.item.pass_criterion,
+          recommendation_source: drill.sourceCaseId
             ? "coach_approved"
             : "vector_engine",
-          recommendation_rationale: golf?.rationale,
-          recommendation_score: golf?.score,
-          evidence_snapshot: golf?.evidence,
+          recommendation_rationale: drill.rationale,
+          recommendation_score: drill.score,
+          evidence_snapshot: drill.evidence,
+          swing_movement_id: drillIndex === 0 ? movementSuggestion.movement?.id || null : null,
+          swing_movement_source: drillIndex === 0 && movementSuggestion.movement ? "vector_engine" : null,
+          swing_movement_rationale: drillIndex === 0 ? movementSuggestion.rationale : null,
         });
+      });
       if (index < vectorCount && vectorSplit[index] > 0) {
         const vector = recommendationForSession(
           plan.vector,
@@ -434,7 +464,7 @@ export default function ProgrammePage() {
         );
         blocks.push({
           session_id: session.id,
-          sequence: 2,
+          sequence: 4,
           domain: "vector",
           stage: "vector",
           minutes: vectorSplit[index],

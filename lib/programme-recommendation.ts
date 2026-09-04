@@ -168,6 +168,104 @@ export function splitMinutes(total: number, count: number) {
   );
 }
 
+export type GolfPracticeRole = "technical_1" | "technical_2" | "performance_test";
+
+export type GolfPracticeRecommendation = PlanRecommendation & {
+  role: GolfPracticeRole;
+  stage: "technique" | "skill" | "transfer";
+  allocationPercent: 30 | 40;
+};
+
+const isPerformanceDrill = (item: RecommendationLibraryItem) =>
+  /performance|perform|transfer|pressure|random|test/i.test(item.stage || "");
+
+const isTechnicalDrill = (item: RecommendationLibraryItem) =>
+  /movement|contact|learn|calibrate|technique|skill/i.test(item.stage || "");
+
+function recommendationFromLibrary(
+  item: RecommendationLibraryItem,
+  role: GolfPracticeRole,
+): PlanRecommendation {
+  return {
+    item,
+    sourceCaseId: null,
+    score: role === "performance_test" ? 80 : 90,
+    rationale:
+      role === "performance_test"
+        ? `Vector selected this as the end-of-session performance test from the same ${item.category || "practice"} fault family.`
+        : `Vector selected this as a complementary technical drill from the same ${item.category || "practice"} fault family.`,
+    evidence: null,
+    requiresReview: false,
+  };
+}
+
+function uniqueRecommendations(items: PlanRecommendation[]) {
+  return items.filter(
+    (entry, index, all) =>
+      all.findIndex((candidate) => candidate.item.id === entry.item.id) === index,
+  );
+}
+
+export function buildGolfPracticeSequence({
+  recommended,
+  library,
+  facilities = [],
+  weekNumber,
+  sessionIndex,
+}: {
+  recommended: PlanRecommendation[];
+  library: RecommendationLibraryItem[];
+  facilities?: string[];
+  weekNumber: number;
+  sessionIndex: number;
+}): GolfPracticeRecommendation[] {
+  if (!recommended.length) return [];
+  const offset = Math.max(0, weekNumber - 1 + sessionIndex);
+  const primary = recommended[offset % recommended.length];
+  const category = lower(primary.item.category);
+  const sameFamily = (item: RecommendationLibraryItem) =>
+    item.item_type === "golf_drill" &&
+    lower(item.category) === category &&
+    item.instruction_complete &&
+    equipmentAvailable(item, facilities);
+  const fallback = library.filter(sameFamily);
+  const familyRecommendations = recommended.filter((entry) => sameFamily(entry.item));
+  const technical = uniqueRecommendations([
+    ...familyRecommendations.filter((entry) => isTechnicalDrill(entry.item)),
+    ...fallback
+      .filter(isTechnicalDrill)
+      .map((item) => recommendationFromLibrary(item, "technical_2")),
+    ...familyRecommendations.filter((entry) => !isPerformanceDrill(entry.item)),
+    ...fallback
+      .filter((item) => !isPerformanceDrill(item))
+      .map((item) => recommendationFromLibrary(item, "technical_2")),
+  ]);
+  const performance = uniqueRecommendations([
+    ...familyRecommendations.filter((entry) => isPerformanceDrill(entry.item)),
+    ...fallback
+      .filter(isPerformanceDrill)
+      .map((item) => recommendationFromLibrary(item, "performance_test")),
+  ]);
+  const rotate = <T,>(items: T[], index: number) =>
+    items.length ? items[index % items.length] : null;
+  const first = rotate(technical, offset);
+  const secondPool = technical.filter((entry) => entry.item.id !== first?.item.id);
+  const second = rotate(secondPool, offset + 1);
+  const test = rotate(performance, offset);
+  const sequence: GolfPracticeRecommendation[] = [];
+  if (first) sequence.push({ ...first, role: "technical_1", stage: "technique", allocationPercent: 30 });
+  if (second) sequence.push({ ...second, role: "technical_2", stage: "skill", allocationPercent: 30 });
+  if (test) sequence.push({ ...test, role: "performance_test", stage: "transfer", allocationPercent: 40 });
+  return sequence;
+}
+
+export function splitGolfPracticeMinutes(total: number) {
+  if (total <= 0) return [0, 0, 0];
+  const first = Math.floor(total * 0.3);
+  const second = Math.floor(total * 0.3);
+  return [first, second, total - first - second];
+}
+
 export type WorkoutRecommendation = PlanRecommendation & {
   role: "power" | "strength" | "support" | "conditioning";
   minutes: number;

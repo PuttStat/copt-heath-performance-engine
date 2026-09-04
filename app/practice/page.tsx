@@ -520,7 +520,7 @@ export default function PracticePage() {
                 </div>
                 <div className="delivery-blocks">
                   {active.session_blocks
-                    .sort((a, b) => a.sequence - b.sequence)
+                    .sort((a, b) => a.domain === b.domain ? a.sequence - b.sequence : a.domain === "golf" ? -1 : 1)
                     .map((block) => {
                       const done = log.block_completions?.some(
                         (x) => x.session_block_id === block.id && x.completed,
