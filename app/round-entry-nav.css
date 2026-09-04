@@ -1,0 +1,5 @@
+.round-entry-nav{display:flex;gap:8px;overflow-x:auto;margin:-28px 0 34px;padding:8px;background:rgba(252,251,247,.82);border:1px solid var(--line);backdrop-filter:blur(12px)}
+.round-entry-nav a{white-space:nowrap;padding:10px 14px;color:var(--muted);font-size:11px;font-weight:800}
+.round-entry-nav a:last-child{background:var(--forest);color:white}
+.round-entry-nav a:hover{background:var(--sage);color:var(--ink)}
+@media(max-width:780px){.round-entry-nav{margin:-18px 0 24px}.round-entry-nav a{padding:9px 12px}}
