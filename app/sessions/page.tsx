@@ -7,7 +7,8 @@ import { buildDiagnosticObservations, type MissAggregate } from "../../lib/diagn
 import {
   recommendPlanItems,
   buildVectorWorkout,
-  recommendationForSession,
+  buildGolfPracticeSequence,
+  splitGolfPracticeMinutes,
   splitMinutes,
   type ApprovedPrescription,
   type PlanningPhase,
@@ -58,12 +59,10 @@ type Session = {
   status: string;
   session_blocks: Block[];
 };
-const stageByPhase: Record<string, string[]> = {
-  Measure: ["baseline", "technique", "skill"],
-  Build: ["technique", "skill", "random"],
-  Stabilise: ["skill", "random", "pressure"],
-  Transfer: ["random", "pressure", "transfer"],
-  Perform: ["pressure", "transfer", "baseline"],
+const practiceRoleLabel = {
+  technical_1: "Technical correction 1",
+  technical_2: "Technical correction 2",
+  performance_test: "Performance test",
 };
 export default function SessionsPage() {
   const { profile } = usePlayerData(),
@@ -264,6 +263,19 @@ export default function SessionsPage() {
     const sessionCount = Math.min(7, Math.max(1, intake?.sessions_per_week || 3)),
       golfSplit = splitMinutes(week.golf_minutes, sessionCount),
       vectorSplit = splitMinutes(week.vector_minutes, Math.min(2, sessionCount));
+    const drillPlans = Array.from({ length: sessionCount }, (_, i) =>
+      buildGolfPracticeSequence({
+        recommended: suggestions.golf,
+        library,
+        facilities: intake?.facilities || [],
+        weekNumber: week.week_number,
+        sessionIndex: i,
+      }),
+    );
+    if (drillPlans.some((plan) => plan.length < 3)) {
+      setMessage("Vector needs at least two player-ready technical drills and one performance drill from the same fault family before it can build this week.");
+      return;
+    }
     const { data: created, error } = await sb
       .from("programme_sessions")
       .insert(
@@ -280,33 +292,35 @@ export default function SessionsPage() {
       setMessage(error?.message || "Could not create sessions.");
       return;
     }
-    const stages = stageByPhase[week.phase] || ["skill", "random", "transfer"];
     const blocks: Array<Record<string, unknown>> = [];
     created.forEach((session, i) => {
-      const selected = recommendationForSession(suggestions.golf, week.week_number, i);
-      const movementSuggestion = suggestSwingMovement(selected?.item, swingMovements);
-      if (golfSplit[i] > 0)
+      const drills = drillPlans[i];
+      const practiceMinutes = splitGolfPracticeMinutes(golfSplit[i]);
+      const movementSuggestion = suggestSwingMovement(drills[0]?.item, swingMovements);
+      drills.forEach((selected, drillIndex) => {
+        if (practiceMinutes[drillIndex] <= 0) return;
         blocks.push({
           session_id: session.id,
-          sequence: 1,
+          sequence: drillIndex + 1,
           domain: "golf",
-          stage: stages[i % stages.length],
-          minutes: golfSplit[i],
-          library_item_id: selected?.item.id || null,
-          source_case_id: selected?.sourceCaseId || null,
-          recommendation_source: selected?.sourceCaseId ? "coach_approved" : "vector_engine",
-          recommendation_rationale: selected?.rationale || null,
-          recommendation_score: selected?.score || null,
-          evidence_snapshot: selected?.evidence || null,
-          swing_movement_id: movementSuggestion.movement?.id || null,
-          swing_movement_source: movementSuggestion.movement ? "vector_engine" : null,
-          swing_movement_rationale: movementSuggestion.rationale,
+          stage: selected.stage,
+          minutes: practiceMinutes[drillIndex],
+          library_item_id: selected.item.id,
+          source_case_id: selected.sourceCaseId || null,
+          recommendation_source: selected.sourceCaseId ? "coach_approved" : "vector_engine",
+          recommendation_rationale: selected.rationale,
+          recommendation_score: selected.score,
+          evidence_snapshot: selected.evidence,
+          swing_movement_id: drillIndex === 0 ? movementSuggestion.movement?.id || null : null,
+          swing_movement_source: drillIndex === 0 && movementSuggestion.movement ? "vector_engine" : null,
+          swing_movement_rationale: drillIndex === 0 ? movementSuggestion.rationale : null,
           instructions:
-            selected?.item.purpose || "Coach to assign an approved drill.",
+            `${practiceRoleLabel[selected.role]} · ${selected.allocationPercent}% of practice balls (${selected.allocationPercent} of a 100-ball bucket). ${selected.item.purpose}`,
           success_criterion:
-            selected?.item.pass_criterion ||
+            selected.item.pass_criterion ||
             "Record the agreed success measure before progressing.",
         });
+      });
       if (i < vectorSplit.length && vectorSplit[i] > 0) {
         const workout = buildVectorWorkout({
           recommended: suggestions.vector,
@@ -318,7 +332,7 @@ export default function SessionsPage() {
         });
         workout.forEach((v, workoutIndex) => blocks.push({
           session_id: session.id,
-          sequence: 2 + workoutIndex,
+          sequence: 4 + workoutIndex,
           domain: "vector",
           stage: "vector",
           minutes: v.minutes,
@@ -341,7 +355,7 @@ export default function SessionsPage() {
         ? blockError.message
         : suggestions.requiresReview
           ? "Suggested week built. Review every exercise and P-position movement against the player's evidence and recovery constraints before release."
-          : "Vector built the suggested week with a drill, P-position movement aid and balanced multi-exercise workouts. Review or change any item before release.",
+          : "Vector built each session with two technical drills, one performance test, one P-position movement aid and a balanced Vector workout. Review or change any item before release.",
     );
     await loadSessions();
   };
@@ -364,6 +378,49 @@ export default function SessionsPage() {
       .eq("id", id);
     setMessage(error ? error.message : "Session updated.");
     if (!error) await loadSessions();
+  };
+  const addPracticeDrill = async (session: Session) => {
+    const sb = getSupabaseBrowserClient();
+    if (!sb || !canCoach) return;
+    const golfBlocks = session.session_blocks.filter((block) => block.domain === "golf");
+    const donor = [...golfBlocks].sort((a, b) => b.minutes - a.minutes)[0];
+    if (!donor || donor.minutes < 2) {
+      setMessage("There are not enough golf minutes to add another practice drill.");
+      return;
+    }
+    const newMinutes = Math.max(1, Math.floor(donor.minutes / 2));
+    const sequence = Math.max(0, ...session.session_blocks.map((block) => block.sequence)) + 1;
+    const { data: created, error: insertError } = await sb
+      .from("session_blocks")
+      .insert({
+        session_id: session.id,
+        sequence,
+        domain: "golf",
+        stage: "skill",
+        minutes: newMinutes,
+        library_item_id: null,
+        recommendation_source: "coach_override",
+        recommendation_rationale: "Coach added an additional practice drill.",
+        instructions: "Coach to select a player-ready practice drill.",
+        success_criterion: "Record the agreed success measure before progressing.",
+      })
+      .select("id")
+      .single();
+    if (insertError || !created) {
+      setMessage(insertError?.message || "Could not add the practice drill.");
+      return;
+    }
+    const { error: updateError } = await sb
+      .from("session_blocks")
+      .update({ minutes: donor.minutes - newMinutes })
+      .eq("id", donor.id);
+    if (updateError) {
+      await sb.from("session_blocks").delete().eq("id", created.id);
+      setMessage(updateError.message);
+      return;
+    }
+    setMessage("Practice drill added. Choose the drill; Vector has kept the session's total golf minutes unchanged.");
+    await loadSessions();
   };
   const release = async () => {
     const sb = getSupabaseBrowserClient();
@@ -538,7 +595,7 @@ export default function SessionsPage() {
             </header>
             <div>
               {(session.session_blocks || [])
-                .sort((a, b) => a.sequence - b.sequence)
+                .sort((a, b) => a.domain === b.domain ? a.sequence - b.sequence : a.domain === "golf" ? -1 : 1)
                 .map((block) => (
                   <div
                     className={`planned-block ${block.domain}`}
@@ -595,7 +652,9 @@ export default function SessionsPage() {
                       {block.success_criterion && (
                         <small>Success: {block.success_criterion}</small>
                       )}
-                      {block.domain === "golf" && (
+                      {block.domain === "golf" && block.id === session.session_blocks
+                        .filter((item) => item.domain === "golf")
+                        .sort((a, b) => a.sequence - b.sequence)[0]?.id && (
                         <section className="swing-movement-aid">
                           <label>
                             Swing movement aid
@@ -675,6 +734,12 @@ export default function SessionsPage() {
                   </div>
                 ))}
             </div>
+            {canCoach && (
+              <footer className="session-actions">
+                <button type="button" onClick={() => void addPracticeDrill(session)}>+ Add practice drill</button>
+                <span>New drills share the existing golf minutes, so the week remains reconciled.</span>
+              </footer>
+            )}
           </article>
         ))}
         {programme && !sessions.length && (
