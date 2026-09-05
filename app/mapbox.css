@@ -1,0 +1,22 @@
+.mapbox-course-map {
+  position: relative;
+  overflow: hidden;
+}
+
+.mapbox-course-map .mapboxgl-canvas {
+  cursor: crosshair;
+}
+
+.mapboxgl-ctrl-bottom-left {
+  font-size: 9px;
+}
+
+.mapboxgl-ctrl-attrib {
+  background: rgba(255, 255, 255, 0.78) !important;
+}
+
+@media (max-width: 780px) {
+  .mapboxgl-ctrl-bottom-right {
+    bottom: 42px;
+  }
+}
