@@ -14,6 +14,8 @@ test("separate Stracka scorecard and GPS payloads produce playable mapped holes"
 });
 
 test("empty or invalid GPS shapes are rejected by the normaliser",()=>{
-  const result=normaliseCourseDetail({holes:[{holeId:1,holeNumber:1}],gpsItems:[{holeId:1,gpsType:"GreenTrace",shapes:[[{latitude:52.4,longitude:-1.8}]]}]});
+  const result=normaliseCourseDetail({courses:[{tees:[{courseTeeType:"Total",isTeeActive:true,holes:[{holeId:1,holeNumber:1,par:4,yardage:410}]}]}],holes:[{holeId:1,holeNumber:1}],gpsItems:[{holeId:1,gpsType:"GreenTrace",shapes:[[{latitude:52.4,longitude:-1.8}]]}]});
   assert.equal(result.features.length,0);
+  assert.equal(result.holes[0].par,4);
+  assert.equal(result.holes[0].yardage,410);
 });
