@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import "mapbox-gl/dist/mapbox-gl.css";
 import "./globals.css";
 import "./library.css";
 import "./diagnostics.css";
@@ -13,6 +14,7 @@ import "./resilience.css";
 import "./pilot.css";
 import "./release.css";
 import "./mapping.css";
+import "./mapbox.css";
 import "./course-import.css";
 import "./round-entry-nav.css";
 import { SyncStatus } from "./ui/sync-status";
