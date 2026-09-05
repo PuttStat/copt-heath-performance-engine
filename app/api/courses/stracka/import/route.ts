@@ -5,13 +5,15 @@ import { fetchCourseDetail,normaliseCourseDetail } from "../../../../../src/lib/
 
 export async function POST(request:Request){
   try{
-    const supabase=await createClient();const{data:{user}}=await supabase.auth.getUser();
+    const supabase=await createClient(),authorization=request.headers.get("authorization"),accessToken=authorization?.startsWith("Bearer ")?authorization.slice(7).trim():undefined;
+    const{data:{user}}=accessToken?await supabase.auth.getUser(accessToken):await supabase.auth.getUser();
     if(!user)return NextResponse.json({error:"Please sign in."},{status:401});
-    const{data:profile}=await supabase.from("profiles").select("role").eq("id",user.id).single();
+    const admin=createAdminClient();
+    const{data:profile}=await admin.from("profiles").select("role").eq("id",user.id).single();
     if(!profile||!["coach","admin"].includes(profile.role))return NextResponse.json({error:"Coach access is required."},{status:403});
     const body=await request.json() as {publicId?:string};const publicId=body.publicId?.trim();
     if(!publicId||publicId.length>120)return NextResponse.json({error:"Enter a valid Golf Intelligence public ID."},{status:400});
-    const detail=await fetchCourseDetail(publicId),normalised=normaliseCourseDetail(detail),admin=createAdminClient();
+    const detail=await fetchCourseDetail(publicId),normalised=normaliseCourseDetail(detail);
     if(!normalised.holes.length)throw new Error("The course response did not contain any playable holes.");
     const{data:course,error:courseError}=await admin.from("course_catalog").upsert({provider:"golf_intelligence",provider_course_id:publicId,name:detail.name||"Imported golf course",updated_by_provider_at:detail.updatedOn||null,imported_at:new Date().toISOString(),raw_metadata:{facility:detail.facility,courses:detail.courses}},{onConflict:"provider,provider_course_id"}).select("id,name").single();
     if(courseError||!course)throw new Error(courseError?.message||"The course record could not be saved.");
