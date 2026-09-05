@@ -18,4 +18,20 @@ test("empty or invalid GPS shapes are rejected by the normaliser",()=>{
   assert.equal(result.features.length,0);
   assert.equal(result.holes[0].par,4);
   assert.equal(result.holes[0].yardage,410);
+  assert.equal(result.parHoles,1);
+});
+
+test("scorecards nested in data and non-Total tee types are recognised",()=>{
+  const result=normaliseCourseDetail({data:JSON.stringify({courses:[{tees:[{courseTeeType:"Championship",isTeeActive:true,holes:[{holeId:22,holeNumber:1,par:5,yardage:515}]}]}]})});
+  assert.equal(result.holes.length,1);
+  assert.equal(result.holes[0].par,5);
+  assert.equal(result.holes[0].yardage,515);
+  assert.equal(result.scorecardRecords,1);
+});
+
+test("GPS and scorecard holes with different IDs match by hole number",()=>{
+  const result=normaliseCourseDetail({holes:[{holeId:1001,holeNumber:1}],courses:[{tees:[{courseTeeType:2,isTeeActive:true,holes:[{holeId:2001,holeNumber:1,par:4,yardage:401}]}]}]});
+  assert.equal(result.holes.length,1);
+  assert.equal(result.holes[0].provider_hole_id,1001);
+  assert.equal(result.holes[0].par,4);
 });
