@@ -7,6 +7,37 @@
   cursor: crosshair;
 }
 
+.map-drag-marker {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 4px solid #102a24;
+  border-radius: 50%;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.42);
+  font: 800 15px/1 Arial, sans-serif;
+  color: #102a24;
+  cursor: grab;
+  touch-action: none;
+}
+
+.map-drag-marker:active {
+  cursor: grabbing;
+  transform: scale(1.08);
+}
+
+.tee-marker {
+  background: #fffaf0;
+}
+
+.candidate-marker {
+  width: 48px;
+  height: 48px;
+  border-color: #fffaf0;
+  background: #e6b85c;
+  font-size: 22px;
+}
+
 .mapboxgl-ctrl-bottom-left {
   font-size: 9px;
 }
@@ -18,5 +49,15 @@
 @media (max-width: 780px) {
   .mapboxgl-ctrl-bottom-right {
     bottom: 42px;
+  }
+
+  .map-drag-marker {
+    width: 48px;
+    height: 48px;
+  }
+
+  .candidate-marker {
+    width: 54px;
+    height: 54px;
   }
 }
