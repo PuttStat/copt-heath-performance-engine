@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "../../../../../src/lib/supabase/server";
 import { createAdminClient } from "../../../../../src/lib/supabase/admin";
-import { fetchCourseDetail,normaliseCourseDetail } from "../../../../../src/lib/golf-intelligence";
+import { fetchCourseDetail,fetchCourseScorecard,normaliseCourseDetail } from "../../../../../src/lib/golf-intelligence";
 
 export async function POST(request:Request){
   try{
@@ -11,10 +11,11 @@ export async function POST(request:Request){
     const admin=createAdminClient();
     const{data:profile}=await admin.from("profiles").select("role").eq("id",user.id).single();
     if(!profile||!["coach","admin"].includes(profile.role))return NextResponse.json({error:"Coach access is required."},{status:403});
-    const body=await request.json() as {publicId?:string};const publicId=body.publicId?.trim();
+    const body=await request.json() as {publicId?:string;mode?:"full"|"scorecard"};const publicId=body.publicId?.trim();
     if(!publicId||publicId.length>120)return NextResponse.json({error:"Enter a valid Golf Intelligence public ID."},{status:400});
     const{data:existing}=await admin.from("course_catalog").select("id,name").eq("provider","golf_intelligence").eq("provider_course_id",publicId).maybeSingle();
-    const detail=await fetchCourseDetail(publicId),credits=3;
+    const scorecardOnly=body.mode==="scorecard";
+    const detail=scorecardOnly?await fetchCourseScorecard(publicId):await fetchCourseDetail(publicId),credits=scorecardOnly?1:3;
     const normalised=normaliseCourseDetail(detail);
     if(!normalised.holes.length)throw new Error("The course response did not contain any playable holes.");
     const{data:course,error:courseError}=await admin.from("course_catalog").upsert({provider:"golf_intelligence",provider_course_id:publicId,name:detail.name||existing?.name||"Imported golf course",updated_by_provider_at:detail.updatedOn||null,imported_at:new Date().toISOString(),raw_metadata:{facility:detail.facility,courses:detail.courses,holes:detail.holes,courseGroupId:detail.courseGroupId,publicId:detail.publicId}},{onConflict:"provider,provider_course_id"}).select("id,name").single();
@@ -27,6 +28,6 @@ export async function POST(request:Request){
       const{error:deleteError}=await admin.from("course_features").delete().eq("course_id",course.id);if(deleteError)throw new Error(deleteError.message);
       const{error:featureError}=await admin.from("course_features").insert(featureRows);if(featureError)throw new Error(featureError.message);
     }
-    return NextResponse.json({courseId:course.id,name:course.name,holes:normalised.holes.length,features:featureRows.length,credits,mappingUpdated:featureRows.length>0});
+    return NextResponse.json({courseId:course.id,name:course.name,holes:normalised.holes.length,features:featureRows.length,credits,mappingUpdated:featureRows.length>0,scorecardRecords:normalised.scorecardRecords,parHoles:normalised.parHoles});
   }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Course import failed."},{status:502})}
 }
